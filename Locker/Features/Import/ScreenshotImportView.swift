@@ -27,6 +27,8 @@ struct ScreenshotImportView: View {
     @State private var duplicate: DuplicateDetector.Match?
     @State private var duplicateOverridden = false
     @State private var scheduleDuplicates: [UUID: DuplicateDetector.Match] = [:]
+    @State private var hasClipboardImage = false
+    @State private var readingMessage = "Reading…"
 
     // Editable copies, so a misread can be corrected before saving.
     @State private var title = ""
@@ -72,33 +74,54 @@ struct ScreenshotImportView: View {
     }
 
     private var dropZone: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 14) {
             Spacer()
-            Image(systemName: isReading ? "text.viewfinder" : "photo.on.rectangle.angled")
-                .font(.system(size: 30, weight: .light))
-                .foregroundStyle(isTargeted ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(.tertiary))
+
             if isReading {
                 ProgressView().controlSize(.small)
-                Text("Reading the screenshot…").font(.system(size: 12)).foregroundStyle(.secondary)
+                Text(readingMessage)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
             } else {
-                Text("Grab it off the screen").font(Theme.display(15))
-                Text("Locker reads the details and shows them before saving.")
-                    .font(.system(size: 12)).foregroundStyle(.secondary)
+                Image(systemName: "doc.text.viewfinder")
+                    .font(.system(size: 32, weight: .light))
+                    .foregroundStyle(isTargeted ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(.tertiary))
 
-                Button(action: captureFromScreen) {
-                    Label("Capture screenshot", systemImage: "camera.viewfinder")
+                Text("Add from a screenshot or a file")
+                    .font(Theme.display(15))
+                Text("Locker reads the details and shows them before saving.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 10) {
+                    Button(action: captureFromScreen) {
+                        Label("Take a screenshot", systemImage: "camera.viewfinder")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+
+                    Button(action: chooseFile) {
+                        Label("Choose a file", systemImage: "folder")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .padding(.horizontal, 40)
                 .padding(.top, 4)
 
-                Text("or drop an image here, paste with ⌘V")
+                Text("Images, PDFs and text files. You can also drop one here.")
                     .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
-                Button("Choose a file…", action: chooseFile)
-                    .buttonStyle(.link)
-                    .controlSize(.small)
+
+                if hasClipboardImage {
+                    Button("Paste the image on your clipboard", action: pasteFromClipboard)
+                        .buttonStyle(.link)
+                        .font(.system(size: 11))
+                }
             }
+
             if let errorText {
                 Text(errorText)
                     .font(.system(size: 11))
@@ -115,7 +138,7 @@ struct ScreenshotImportView: View {
                 .foregroundStyle(isTargeted ? Theme.accent : Color.primary.opacity(0.15))
                 .padding(14)
         )
-        .onDrop(of: [.image, .fileURL], isTargeted: $isTargeted) { providers in
+        .onDrop(of: [.image, .fileURL, .pdf, .plainText], isTargeted: $isTargeted) { providers in
             load(from: providers)
             return true
         }
@@ -123,13 +146,14 @@ struct ScreenshotImportView: View {
             load(from: providers)
         }
         .onAppear {
+            // Only act on a dropped file. Reading the clipboard unasked meant the
+            // sheet started working the instant it opened, with nothing chosen.
             if !app.droppedProviders.isEmpty {
                 let providers = app.droppedProviders
                 app.droppedProviders = []
                 load(from: providers)
-            } else {
-                readClipboardIfImage()
             }
+            hasClipboardImage = NSPasteboard.general.canReadObject(forClasses: [NSImage.self])
         }
     }
 
@@ -294,6 +318,7 @@ struct ScreenshotImportView: View {
     /// Hands over to the system crosshair, then reads whatever was selected.
     private func captureFromScreen() {
         errorText = nil
+        readingMessage = "Reading the screenshot…"
         Task {
             do {
                 let image = try await ScreenCapture.selectArea()
@@ -309,17 +334,39 @@ struct ScreenshotImportView: View {
 
     private func chooseFile() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.png, .jpeg, .tiff, .image]
+        panel.allowedContentTypes = DocumentReader.readableTypes
         panel.allowsMultipleSelection = false
-        guard panel.runModal() == .OK, let url = panel.url,
-              let image = NSImage(contentsOf: url) else { return }
-        read(image)
+        panel.message = "Choose a screenshot, a PDF, or a text file."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        readFile(at: url)
     }
 
-    private func readClipboardIfImage() {
-        guard draft == nil, !isReading else { return }
+    /// Reads any supported file through the same pipeline a screenshot uses.
+    private func readFile(at url: URL) {
+        isReading = true
+        readingMessage = "Reading \(url.lastPathComponent)…"
+        errorText = nil
+
+        Task {
+            do {
+                let ocr = try DocumentReader.read(fileAt: url)
+                let result = await ScreenshotExtractor.extract(from: ocr, forcing: forcedKindOverride)
+                await MainActor.run { finish(with: result) }
+            } catch {
+                await MainActor.run {
+                    isReading = false
+                    errorText = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func pasteFromClipboard() {
         guard let images = NSPasteboard.general.readObjects(forClasses: [NSImage.self]) as? [NSImage],
-              let first = images.first else { return }
+              let first = images.first else {
+            errorText = "There's no image on the clipboard."
+            return
+        }
         read(first)
     }
 
@@ -343,11 +390,11 @@ struct ScreenshotImportView: View {
 
         _ = provider.loadObject(ofClass: URL.self) { url, _ in
             Task { @MainActor in
-                guard let url, let image = NSImage(contentsOf: url) else {
-                    finishWithError("That file couldn't be opened as an image.")
+                guard let url else {
+                    finishWithError("That file couldn't be opened.")
                     return
                 }
-                read(image)
+                readFile(at: url)
             }
         }
     }
@@ -363,30 +410,35 @@ struct ScreenshotImportView: View {
         lastImage = cgImage
         Task {
             let result = await ScreenshotExtractor.extract(from: cgImage, forcing: forcedKind)
-            await MainActor.run {
-                isReading = false
-                switch result {
-                case .success(let outcome):
-                    switch outcome.content {
-                    case .schedule(let found):
-                        schedule = applyRememberedColumns(to: found)
-                        engine = outcome.engine
-                        checkScheduleDuplicates()
-                    case .assignment(let found):
-                        guard found.isUsable else {
-                            errorText = "No assignment or schedule details were found in that screenshot."
-                            return
-                        }
-                        apply(outcome, draft: found)
-                    }
-                    lastOCRText = outcome.ocrText
-                    lastLines = outcome.lines
-                case .failure(let error):
-                    errorText = error.localizedDescription
-                }
-            }
+            await MainActor.run { finish(with: result) }
         }
     }
+
+    /// One landing point for everything read, however it arrived.
+    private func finish(with result: Result<ExtractionOutcome, Error>) {
+        isReading = false
+        switch result {
+        case .success(let outcome):
+            switch outcome.content {
+            case .schedule(let found):
+                schedule = applyRememberedColumns(to: found)
+                engine = outcome.engine
+                checkScheduleDuplicates()
+            case .assignment(let found):
+                guard found.isUsable else {
+                    errorText = "No assignment or schedule details were found in that."
+                    return
+                }
+                apply(outcome, draft: found)
+            }
+            lastOCRText = outcome.ocrText
+            lastLines = outcome.lines
+        case .failure(let error):
+            errorText = error.localizedDescription
+        }
+    }
+
+    private var forcedKindOverride: ScreenshotKind? { nil }
 
     private func finishWithError(_ message: String) {
         isReading = false

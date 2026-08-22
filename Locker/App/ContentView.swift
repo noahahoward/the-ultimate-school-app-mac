@@ -89,6 +89,11 @@ struct ContentView: View {
             if app.settings.classroomAutoSync { await app.syncAll() }
             await app.checkForUpdatesIfDue()
             registerHotkey()
+            // Dev affordance, same shape as LOCKER_SEED: open a sheet on launch
+            // so the import flow can be checked without clicking through.
+            if ProcessInfo.processInfo.environment["LOCKER_OPEN"] == "import" {
+                app.activeSheet = .screenshotImport
+            }
         }
         .onChange(of: app.settings.globalHotkeyEnabled) { _, _ in registerHotkey() }
     }

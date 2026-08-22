@@ -20,8 +20,27 @@ enum ScreenCapture {
         }
     }
 
-    /// Shows the crosshair and returns the selected area. Nil when cancelled.
-    static func selectArea() async throws -> CGImage {
+    /// Shows the crosshair and returns the selected area.
+    ///
+    /// Locker hides itself first: its own window is usually sitting on top of
+    /// whatever the student wants to capture.
+    @MainActor
+    static func selectArea(hidingApp: Bool = true) async throws -> CGImage {
+        if hidingApp {
+            NSApp.hide(nil)
+            // Let the hide finish before the crosshair takes over the screen.
+            try? await Task.sleep(nanoseconds: 350_000_000)
+        }
+        defer {
+            if hidingApp {
+                NSApp.unhide(nil)
+                NSApp.activate(ignoringOtherApps: true)
+            }
+        }
+        return try await capture()
+    }
+
+    private static func capture() async throws -> CGImage {
         let destination = FileManager.default.temporaryDirectory
             .appendingPathComponent("locker-capture-\(UUID().uuidString).png")
         defer { try? FileManager.default.removeItem(at: destination) }

@@ -67,7 +67,20 @@ enum ScreenshotExtractor {
         now: Date = Date()
     ) async -> Result<ExtractionOutcome, Error> {
         do {
-            let ocr = try ScreenshotOCR.read(image)
+            return await extract(from: try ScreenshotOCR.read(image), forcing: kind, now: now)
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    /// Reads already-recognised text. Files and screenshots share everything from
+    /// here on, so a PDF schedule is read exactly the way a screenshot of one is.
+    static func extract(
+        from ocr: OCRResult,
+        forcing kind: ScreenshotKind? = nil,
+        now: Date = Date()
+    ) async -> Result<ExtractionOutcome, Error> {
+        do {
             if kind == .assignment { return .success(try await assignmentOutcome(ocr: ocr, now: now)) }
 
             // Familiar layouts print one detail line per class ("Period 3 -

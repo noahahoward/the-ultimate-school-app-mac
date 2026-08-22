@@ -67,8 +67,10 @@ To poke around the interface without typing in a whole schedule, launch with
 
 ## Adding work from a screenshot
 
-Screenshot an assignment page or your whole schedule — Google Classroom, Skyward,
-Canvas — and drop it into Locker (⇧⌘I). It reads the details and shows them for
+Press **Add from a screenshot** (⇧⌘I) and choose **Take a screenshot** — Locker
+hides itself and hands you the usual crosshair — or **Choose a file**, which
+accepts images, PDFs, and text files. You can also drop any of those anywhere in
+the window. It reads the details and shows them for
 review before anything is saved. Which kind of screenshot it is, is worked out
 from the text: several classes pinned to periods is a schedule, anything else is
 an assignment.
