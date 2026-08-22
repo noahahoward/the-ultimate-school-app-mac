@@ -42,9 +42,15 @@ codesign --verify --deep --strict "$BUILD/Locker.app" && echo "==> Signature OK"
 ZIP="$BUILD/Locker-$VERSION.zip"
 ( cd "$BUILD" && ditto -c -k --keepParent --sequesterRsrc Locker.app "$ZIP" )
 
+# Keep Spotlight out of the build folder. Without this, every build leaves
+# another launchable "Locker" for Spotlight to find, and opening the wrong one
+# looks exactly like the app having broken.
+touch "$BUILD/.metadata_never_index"
+rm -rf "$BUILD/dd"
+
 echo
 echo "==> Done"
-echo "    App: $BUILD/Locker.app"
+echo "    App: $BUILD/Locker.app  (staging copy — install from here)"
 echo "    Zip: $ZIP"
 echo
 echo "To publish an update students can install from inside the app:"
