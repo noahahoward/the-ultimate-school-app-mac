@@ -65,6 +65,31 @@ xcodebuild -project Locker.xcodeproj -scheme Locker -destination 'platform=macOS
 To poke around the interface without typing in a whole schedule, launch with
 `LOCKER_SEED=1` set and it will fill an empty database with a sample week.
 
+## Adding work from a screenshot
+
+Screenshot any assignment page — Google Classroom, Skyward, Canvas — and drop it
+into Locker (⇧⌘I). It reads the details and shows them for review before anything
+is saved.
+
+The pipeline is deliberately lopsided, because a planner full of wrong dates is
+worse than an empty one:
+
+1. **Vision reads the pixels.** Every line of text, with its position. Columns are
+   detected so a sidebar can't cut a title in half.
+2. **The on-device model only labels.** It says which text is the due date; it
+   never converts, calculates, or writes a value. Guided generation constrains it
+   to a fixed set of slots, so there is no free-form output to misparse, and
+   decoding is greedy so the same screenshot gives the same answer.
+3. **Every slot is checked against the screenshot.** A value that isn't found in
+   the recognized text is dropped and listed as ignored. A made-up due date cannot
+   reach the database.
+4. **Swift does the interpreting.** `"Aug 26"` becomes a date, `"4 points"` becomes
+   a number — in tested code, not in the model.
+
+Needs Apple Intelligence for step 2. Without it, Locker falls back to matching the
+labels school software prints ("Due …", "N points"), and everything else is
+unchanged. Nothing is ever uploaded.
+
 ## Icon
 
 The app icon is an [Icon Composer](https://developer.apple.com/documentation/xcode/creating-your-app-icon-using-icon-composer)

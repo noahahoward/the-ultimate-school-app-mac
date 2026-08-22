@@ -38,6 +38,13 @@ struct ContentView: View {
             detail
                 .toolbar {
                     ToolbarItem(placement: .primaryAction) {
+                        Button { app.activeSheet = .screenshotImport } label: {
+                            Label("Add from screenshot", systemImage: "photo.on.rectangle.angled")
+                        }
+                        .keyboardShortcut("i", modifiers: [.command, .shift])
+                        .help("Add from a screenshot (⇧⌘I)")
+                    }
+                    ToolbarItem(placement: .primaryAction) {
                         Button { app.presentQuickAdd() } label: {
                             Label("Add work", systemImage: "plus")
                         }
@@ -51,6 +58,7 @@ struct ContentView: View {
             switch sheet {
             case .onboarding: OnboardingView().environmentObject(app)
             case .quickAdd: QuickAddWindow().environmentObject(app)
+            case .screenshotImport: ScreenshotImportView().environmentObject(app)
             }
         }
         .task {

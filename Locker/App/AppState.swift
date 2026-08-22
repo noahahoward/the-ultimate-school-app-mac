@@ -38,7 +38,7 @@ enum SettingsTab: String, CaseIterable, Identifiable, Hashable {
 
 /// SwiftUI honours only one `.sheet` per view, so every modal goes through here.
 enum ActiveSheet: String, Identifiable {
-    case onboarding, quickAdd
+    case onboarding, quickAdd, screenshotImport
     var id: String { rawValue }
 }
 
