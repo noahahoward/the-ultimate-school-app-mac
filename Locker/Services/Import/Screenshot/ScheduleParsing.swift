@@ -30,8 +30,13 @@ struct ClassDraft: Equatable, Identifiable, Sendable {
 struct ScheduleDraft: Equatable, Sendable {
     var rows: [ClassDraft] = []
     var rejected: [RejectedField] = []
+    /// Present when the schedule came from the table reader, so the column
+    /// mapping stays adjustable in review.
+    var table: DetectedTable?
+    var roles: [ColumnRole] = []
 
     var isUsable: Bool { !rows.isEmpty }
+    var isColumnMapped: Bool { table?.isUsable == true && !roles.isEmpty }
 }
 
 /// Reads a schedule listing without a model.

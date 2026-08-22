@@ -77,9 +77,20 @@ A schedule import reads the course name, period, term, teacher, room, times, and
 meeting days for every row, and handles schools that run a different timetable
 each semester — Locker then shows whichever one is currently running.
 
-Familiar layouts (a detail line per class, like "Period 3 - SEMESTER 1") are read
-by pattern alone, with no model involved. Anything else goes to the on-device
-model, which is told to find the rows and label the columns and nothing more.
+Schedules are read three ways, in order, and only the middle one needs a model:
+
+1. **Familiar layouts** — a detail line per class, like "Period 3 - SEMESTER 1" —
+   are read by pattern alone.
+2. **The on-device model** is asked to find the rows and label the columns, and
+   nothing more.
+3. **The table reader** recovers the grid from where the text sits on screen and
+   works out what each column holds by its contents: times parse as times,
+   numbers 1–12 are periods, larger numbers are rooms, "SMITH, J" is a teacher.
+   Columns can be relabelled by hand, and the class list updates as you do.
+
+Step 3 needs no model, no download, and no Apple Intelligence, so the feature
+works on any Mac — Intel included. It is also the fastest way to fix a column
+the model labelled wrongly.
 Every value still has to appear in the screenshot to survive, and a value that
 lands in the wrong column produces nothing rather than a plausible mistake — a
 start time of 7:45 will not become "period 7". Every row is editable before it is

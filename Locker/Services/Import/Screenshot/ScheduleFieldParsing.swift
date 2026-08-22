@@ -38,46 +38,59 @@ enum ScheduleFieldParsing {
 
     /// The weekday letters schedules use: "M W F", "MWF", "Mon/Wed", "M-F", "Daily".
     ///
-    /// Two-letter forms are matched before one-letter ones so "Th" is Thursday
-    /// rather than Tuesday followed by a stray letter.
+    /// Longer names are matched before shorter ones so "Th" is Thursday rather
+    /// than Tuesday followed by a stray letter, and "Mon" is consumed whole.
     static func weekdays(from text: String) -> Set<Int>? {
+        parseDays(text)?.days
+    }
+
+    /// True only when the text is *nothing but* a list of days.
+    ///
+    /// Without this, any short string containing an m or a t looks like a day
+    /// list — a teacher column of "SMITH, J" reads as Monday and Tuesday.
+    static func isDayList(_ text: String) -> Bool {
+        guard let parsed = parseDays(text) else { return false }
+        return parsed.fullyConsumed && !parsed.days.isEmpty
+    }
+
+    /// Day tokens longest-first, so multi-letter names win over single letters.
+    private static let dayTokens: [(String, Int)] = [
+        ("monday", 2), ("tuesday", 3), ("wednesday", 4), ("thursday", 5),
+        ("friday", 6), ("saturday", 7), ("sunday", 1),
+        ("tues", 3), ("thur", 5), ("thurs", 5),
+        ("mon", 2), ("tue", 3), ("wed", 4), ("thu", 5), ("fri", 6), ("sat", 7), ("sun", 1),
+        ("th", 5), ("tu", 3), ("mo", 2), ("we", 4), ("fr", 6), ("sa", 7), ("su", 1),
+        ("m", 2), ("t", 3), ("w", 4), ("f", 6),
+    ]
+
+    private static func parseDays(_ text: String) -> (days: Set<Int>, fullyConsumed: Bool)? {
         let lower = text.lowercased()
         guard !lower.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
 
-        if lower.contains("daily") || lower.contains("every day") || lower.contains("everyday") {
-            return Weekdays.schoolWeek
-        }
-        if lower.contains("m-f") || lower.contains("mon-fri") || lower.contains("m - f") {
-            return Weekdays.schoolWeek
+        if lower.contains("daily") || lower.contains("every day") || lower.contains("everyday")
+            || lower.contains("m-f") || lower.contains("mon-fri") || lower.contains("m - f") {
+            return (Weekdays.schoolWeek, true)
         }
 
         let letters = lower.filter { $0.isLetter }
         guard !letters.isEmpty else { return nil }
 
         var days: Set<Int> = []
+        var consumedAll = true
         var index = letters.startIndex
-        while index < letters.endIndex {
-            let remaining = letters[index...]
-            if remaining.hasPrefix("th") { days.insert(5); index = letters.index(index, offsetBy: 2); continue }
-            if remaining.hasPrefix("tu") { days.insert(3); index = letters.index(index, offsetBy: 2); continue }
-            if remaining.hasPrefix("su") { days.insert(1); index = letters.index(index, offsetBy: 2); continue }
-            if remaining.hasPrefix("sa") { days.insert(7); index = letters.index(index, offsetBy: 2); continue }
-            if remaining.hasPrefix("mo") { days.insert(2); index = letters.index(index, offsetBy: 2); continue }
-            if remaining.hasPrefix("we") { days.insert(4); index = letters.index(index, offsetBy: 2); continue }
-            if remaining.hasPrefix("fr") { days.insert(6); index = letters.index(index, offsetBy: 2); continue }
 
-            switch letters[index] {
-            case "m": days.insert(2)
-            case "t": days.insert(3)
-            case "w": days.insert(4)
-            case "f": days.insert(6)
-            // A lone "s" could be either weekend day, so it is left out rather
-            // than guessed at.
-            default: break
+        while index < letters.endIndex {
+            let remaining = String(letters[index...])
+            if let token = dayTokens.first(where: { remaining.hasPrefix($0.0) }) {
+                days.insert(token.1)
+                index = letters.index(index, offsetBy: token.0.count)
+            } else {
+                // A letter that is no part of any day name: this is not a day list.
+                consumedAll = false
+                index = letters.index(after: index)
             }
-            index = letters.index(after: index)
         }
-        return days.isEmpty ? nil : days
+        return days.isEmpty ? nil : (days, consumedAll)
     }
 
     static func times(from text: String) -> (start: Int, end: Int)? {

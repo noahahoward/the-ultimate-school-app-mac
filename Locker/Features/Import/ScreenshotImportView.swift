@@ -23,6 +23,7 @@ struct ScreenshotImportView: View {
     /// Kept so the screenshot can be re-read the other way when detection is wrong.
     @State private var lastImage: CGImage?
     @State private var lastOCRText = ""
+    @State private var lastLines: [OCRLine] = []
 
     // Editable copies, so a misread can be corrected before saving.
     @State private var title = ""
@@ -312,6 +313,7 @@ struct ScreenshotImportView: View {
                         apply(outcome, draft: found)
                     }
                     lastOCRText = outcome.ocrText
+                    lastLines = outcome.lines
                 case .failure(let error):
                     errorText = error.localizedDescription
                 }
@@ -381,7 +383,7 @@ struct ScreenshotImportView: View {
         isReading = true
         errorText = nil
         Task {
-            let found = await ScreenshotExtractor.readAsSchedule(ocrText: lastOCRText)
+            let found = await ScreenshotExtractor.readAsSchedule(ocrText: lastOCRText, lines: lastLines)
             await MainActor.run {
                 isReading = false
                 guard let found, !found.rows.isEmpty else {
@@ -502,6 +504,59 @@ struct ScreenshotImportView: View {
                     .foregroundStyle(.secondary)
             }
 
+            if let table = found.table, found.isColumnMapped {
+                Section {
+                    ScrollView(.horizontal, showsIndicators: true) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 8) {
+                                ForEach(0..<table.columnCount, id: \.self) { column in
+                                    Picker("", selection: Binding(
+                                        get: { schedule?.roles[column] ?? .ignore },
+                                        set: { newRole in
+                                            guard var roles = schedule?.roles else { return }
+                                            // A role belongs to one column at a time.
+                                            if newRole != .ignore {
+                                                for index in roles.indices where roles[index] == newRole {
+                                                    roles[index] = .ignore
+                                                }
+                                            }
+                                            roles[column] = newRole
+                                            schedule?.roles = roles
+                                            remapColumns()
+                                        }
+                                    )) {
+                                        ForEach(ColumnRole.allCases) { role in
+                                            Text(role.label).tag(role)
+                                        }
+                                    }
+                                    .labelsHidden()
+                                    .frame(width: 104)
+                                }
+                            }
+
+                            ForEach(Array(table.rows.prefix(4).enumerated()), id: \.offset) { _, cells in
+                                HStack(spacing: 8) {
+                                    ForEach(0..<table.columnCount, id: \.self) { column in
+                                        Text(column < cells.count ? cells[column] : "")
+                                            .font(Theme.data(10))
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                            .frame(width: 104, alignment: .leading)
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                } header: {
+                    Text("Columns")
+                } footer: {
+                    Text("Locker worked these out from the layout. If a column is labelled wrongly, change it here and the list above updates.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             if hasSemesterRows {
                 Section {
                     DatePicker("Second semester starts", selection: $secondSemesterStart, displayedComponents: .date)
@@ -513,6 +568,14 @@ struct ScreenshotImportView: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    /// Rebuilds the class list after a column is reassigned.
+    private func remapColumns() {
+        guard let current = schedule, let table = current.table else { return }
+        var rebuilt = current
+        rebuilt.rows = TableScheduleBuilder.rows(from: table, roles: current.roles)
+        schedule = rebuilt
     }
 
     private func saveSchedule() {

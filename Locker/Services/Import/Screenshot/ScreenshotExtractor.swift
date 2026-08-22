@@ -14,11 +14,13 @@ enum ScreenshotKind: String, Sendable {
 enum ExtractionEngine: String, Sendable {
     case model = "on-device model"
     case labels = "label matching"
+    case table = "table layout"
 
     var explanation: String {
         switch self {
         case .model: "Read on this Mac by Apple's on-device model. Nothing was uploaded."
         case .labels: "Read by matching labels in the screenshot. No model was used."
+        case .table: "Read from the table layout. No model was used — check the columns below."
         }
     }
 }
@@ -35,6 +37,8 @@ struct ExtractionOutcome: Sendable {
     var content: ScreenshotContent
     var engine: ExtractionEngine
     var ocrText: String
+    /// Kept so the columns can be re-read without running Vision again.
+    var lines: [OCRLine] = []
 
     var assignment: ImportDraft? {
         if case .assignment(let draft) = content { return draft }
@@ -73,7 +77,7 @@ enum ScreenshotExtractor {
                 return .success(ExtractionOutcome(
                     content: .schedule(ScheduleDraft(rows: patternRows)),
                     engine: .labels,
-                    ocrText: ocr.text
+                    ocrText: ocr.text, lines: ocr.lines
                 ))
             }
 
@@ -84,8 +88,25 @@ enum ScreenshotExtractor {
                 return .success(ExtractionOutcome(
                     content: .schedule(ScheduleDraft(rows: modelRows)),
                     engine: .model,
-                    ocrText: ocr.text
+                    ocrText: ocr.text, lines: ocr.lines
                 ))
+            }
+
+            // Last, and available on every Mac: recover the grid from where the
+            // text sits and work out what each column holds. No model, so this
+            // is what an Intel Mac or a machine without Apple Intelligence gets,
+            // and the columns can be reassigned by hand if a guess is wrong.
+            let table = TableDetector.detect(ocr.lines)
+            if table.isUsable {
+                let roles = ColumnRoleGuesser.guess(for: table)
+                let rows = TableScheduleBuilder.rows(from: table, roles: roles)
+                if rows.count >= 2 {
+                    return .success(ExtractionOutcome(
+                        content: .schedule(ScheduleDraft(rows: rows, table: table, roles: roles)),
+                        engine: .table,
+                        ocrText: ocr.text, lines: ocr.lines
+                    ))
+                }
             }
 
             return .success(try await assignmentOutcome(ocr: ocr, now: now))
@@ -106,17 +127,22 @@ enum ScreenshotExtractor {
 
             let checked = EvidenceCheck.verify(fields, against: ocr.text)
             let draft = FieldParsing.draft(from: checked.fields, rejected: checked.rejected, now: now)
-            return ExtractionOutcome(content: .assignment(draft), engine: engine, ocrText: ocr.text)
+            return ExtractionOutcome(content: .assignment(draft), engine: engine, ocrText: ocr.text, lines: ocr.lines)
         }
     }
 
     /// Re-reads an already-recognised screenshot as a schedule, for when the
     /// assignment reader was pointed at a timetable it didn't recognise.
-    static func readAsSchedule(ocrText: String) async -> ScheduleDraft? {
+    static func readAsSchedule(ocrText: String, lines: [OCRLine]) async -> ScheduleDraft? {
         if let rows = await ModelScheduleReader.read(ocrText: ocrText), rows.count >= 1 {
             return ScheduleDraft(rows: rows)
         }
-        return nil
+        let table = TableDetector.detect(lines)
+        guard table.isUsable else { return nil }
+        let roles = ColumnRoleGuesser.guess(for: table)
+        let rows = TableScheduleBuilder.rows(from: table, roles: roles)
+        guard !rows.isEmpty else { return nil }
+        return ScheduleDraft(rows: rows, table: table, roles: roles)
     }
 
     /// The model leads, but anything it left blank falls back to label matching
