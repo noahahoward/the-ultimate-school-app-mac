@@ -1,0 +1,224 @@
+import SwiftUI
+import SwiftData
+
+/// First launch: enough to make Today useful, and not one field more.
+struct OnboardingView: View {
+    @EnvironmentObject private var app: AppState
+    @Environment(\.dismiss) private var dismiss
+    @Query(sort: \SchoolClass.sortIndex) private var classes: [SchoolClass]
+
+    @State private var step = 0
+    @State private var newClassName = ""
+    @State private var isConnecting = false
+    @State private var connectError: String?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Divider()
+            footer
+        }
+        .frame(width: 560, height: 480)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch step {
+        case 0: welcome
+        case 1: scheduleStep
+        default: classesStep
+        }
+    }
+
+    private var welcome: some View {
+        VStack(spacing: 14) {
+            Spacer()
+            Image(systemName: "graduationcap.fill")
+                .font(.system(size: 40))
+                .foregroundStyle(Theme.accent)
+            Text("Locker")
+                .font(Theme.display(30, weight: .bold))
+            Text("Everything due, all in one place.\nAdd work by typing it, and Locker figures out the class and the date.")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Spacer()
+        }
+        .padding(30)
+    }
+
+    private var scheduleStep: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            stepHeader("How does your schedule work?", "This decides how the day view lays out.")
+
+            Picker("", selection: scheduleBinding) {
+                ForEach(ScheduleKind.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.radioGroup)
+            .labelsHidden()
+
+            if app.settings.scheduleKind == .alternatingAB {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Which is today?")
+                        .font(.system(size: 12, weight: .medium))
+                    Picker("", selection: anchorBinding) {
+                        Text("Today is an A day").tag(true)
+                        Text("Today is a B day").tag(false)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    Text("If the letters ever drift after a day off, you can reset this in Settings.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.top, 4)
+            }
+
+            DatePicker(
+                "First day of school",
+                selection: Binding(
+                    get: { app.settings.firstDayOfSchool ?? Date() },
+                    set: { app.settings.firstDayOfSchool = $0 }
+                ),
+                displayedComponents: .date
+            )
+
+            Spacer()
+        }
+        .padding(30)
+    }
+
+    private var classesStep: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            stepHeader("Add your classes", "Names are enough for now — times and colors can come later.")
+
+            HStack(spacing: 8) {
+                TextField("Class name", text: $newClassName)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(addClass)
+                Button("Add", action: addClass)
+                    .disabled(newClassName.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+
+            if classes.isEmpty {
+                Text("No classes yet.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            } else {
+                ScrollView {
+                    VStack(spacing: 4) {
+                        ForEach(classes) { schoolClass in
+                            HStack(spacing: 8) {
+                                ClassDot(hex: schoolClass.colorHex)
+                                Text(schoolClass.name)
+                                    .font(.system(size: 12))
+                                Spacer()
+                                Button {
+                                    app.context.delete(schoolClass)
+                                    app.save()
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .padding(.vertical, 3)
+                        }
+                    }
+                }
+                .frame(maxHeight: 150)
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Or pull them from Google Classroom")
+                    .font(.system(size: 12, weight: .medium))
+                Text("Needs a one-time setup in Google Cloud Console. You can do this later in Settings.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                if let connectError {
+                    Text(connectError)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.overdue)
+                }
+                Button(isConnecting ? "Connecting…" : "Set up Google Classroom") {
+                    app.section = .today
+                    finish(openSettings: true)
+                }
+                .disabled(isConnecting)
+            }
+
+            Spacer()
+        }
+        .padding(30)
+    }
+
+    private func stepHeader(_ title: String, _ subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title).font(Theme.display(19, weight: .semibold))
+            Text(subtitle).font(.system(size: 12)).foregroundStyle(.secondary)
+        }
+    }
+
+    private var footer: some View {
+        HStack {
+            if step > 0 {
+                Button("Back") { step -= 1 }
+            }
+            Spacer()
+            Text("\(step + 1) of 3")
+                .font(Theme.data(11))
+                .foregroundStyle(.tertiary)
+            Spacer()
+            Button(step == 2 ? "Start using Locker" : "Continue") {
+                if step == 2 { finish() } else { step += 1 }
+            }
+            .buttonStyle(.borderedProminent)
+            .keyboardShortcut(.defaultAction)
+        }
+        .padding(12)
+    }
+
+    private var scheduleBinding: Binding<ScheduleKind> {
+        Binding(
+            get: { app.settings.scheduleKind },
+            set: { kind in
+                app.settings.scheduleKind = kind
+                if kind == .alternatingAB, app.settings.abAnchorDate == nil {
+                    app.settings.abAnchorDate = Calendar.current.startOfDay(for: Date())
+                }
+            }
+        )
+    }
+
+    private var anchorBinding: Binding<Bool> {
+        Binding(
+            get: { app.settings.abAnchorIsA },
+            set: { isA in
+                app.settings.abAnchorIsA = isA
+                app.settings.abAnchorDate = Calendar.current.startOfDay(for: Date())
+            }
+        )
+    }
+
+    private func addClass() {
+        let name = newClassName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        let created = SchoolClass(
+            name: name,
+            colorHex: ClassPalette.hex(forIndex: classes.count),
+            daysMask: Weekdays.mask(from: Weekdays.schoolWeek),
+            sortIndex: classes.count
+        )
+        app.context.insert(created)
+        app.save()
+        newClassName = ""
+    }
+
+    private func finish(openSettings: Bool = false) {
+        app.settings.hasCompletedOnboarding = true
+        app.save()
+        dismiss()
+    }
+}

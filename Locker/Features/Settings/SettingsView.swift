@@ -1,0 +1,426 @@
+import SwiftUI
+import SwiftData
+
+struct SettingsView: View {
+    @EnvironmentObject private var app: AppState
+
+    var body: some View {
+        TabView {
+            GeneralSettings().tabItem { Label("General", systemImage: "gearshape") }
+            ScheduleSettings().tabItem { Label("Schedule", systemImage: "calendar") }
+            ReminderSettings().tabItem { Label("Reminders", systemImage: "bell") }
+            SyncSettings().tabItem { Label("Sync", systemImage: "arrow.triangle.2.circlepath") }
+            UpdateSettings().tabItem { Label("Updates", systemImage: "arrow.down.circle") }
+        }
+        .frame(width: 520, height: 470)
+    }
+}
+
+// MARK: - General
+
+private struct GeneralSettings: View {
+    @EnvironmentObject private var app: AppState
+    @AppStorage("menuBarEnabled") private var menuBarEnabled = true
+
+    var body: some View {
+        Form {
+            Section("Focus timer") {
+                Stepper("Focus: \(app.settings.focusMinutes) min",
+                        value: binding(\.focusMinutes), in: 5...90, step: 5)
+                Stepper("Short break: \(app.settings.shortBreakMinutes) min",
+                        value: binding(\.shortBreakMinutes), in: 1...30)
+                Stepper("Long break: \(app.settings.longBreakMinutes) min",
+                        value: binding(\.longBreakMinutes), in: 5...45, step: 5)
+                Stepper("Long break after \(app.settings.sessionsBeforeLongBreak) runs",
+                        value: binding(\.sessionsBeforeLongBreak), in: 2...8)
+                Toggle("Play a sound when a timer ends", isOn: binding(\.focusChimeEnabled))
+            }
+
+            Section("Menu bar") {
+                Toggle("Show Locker in the menu bar", isOn: $menuBarEnabled)
+                Text("The menu bar item shows your next class and what's due today.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Shortcut") {
+                Toggle("Add work from anywhere with ⌃⌥Space", isOn: binding(\.globalHotkeyEnabled))
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func binding<T>(_ keyPath: ReferenceWritableKeyPath<AppSettings, T>) -> Binding<T> {
+        Binding(
+            get: { app.settings[keyPath: keyPath] },
+            set: { app.settings[keyPath: keyPath] = $0; app.save() }
+        )
+    }
+}
+
+// MARK: - Schedule
+
+private struct ScheduleSettings: View {
+    @EnvironmentObject private var app: AppState
+
+    var body: some View {
+        Form {
+            Section("Type") {
+                Picker("Schedule", selection: Binding(
+                    get: { app.settings.scheduleKind },
+                    set: { app.settings.scheduleKind = $0; app.save() }
+                )) {
+                    ForEach(ScheduleKind.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+            }
+
+            if app.settings.scheduleKind == .alternatingAB {
+                Section("A / B days") {
+                    let letter = ScheduleEngine.letter(for: Date(), config: app.scheduleConfig)
+                    LabeledContent("Today is", value: letter.map { "\($0.rawValue) day" } ?? "not a school day")
+
+                    HStack(spacing: 8) {
+                        Text("Fix the letters:")
+                        Button("Today is an A day") { reanchor(isA: true) }
+                        Button("Today is a B day") { reanchor(isA: false) }
+                    }
+                    Text("Use this after a snow day or an assembly throws the rotation off.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section("School year") {
+                DatePicker("First day", selection: Binding(
+                    get: { app.settings.firstDayOfSchool ?? Date() },
+                    set: { app.settings.firstDayOfSchool = $0; app.save() }
+                ), displayedComponents: .date)
+
+                DatePicker("Last day", selection: Binding(
+                    get: { app.settings.lastDayOfSchool ?? Date() },
+                    set: { app.settings.lastDayOfSchool = $0; app.save() }
+                ), displayedComponents: .date)
+            }
+
+            Section("Days off") {
+                HStack {
+                    Text("\(app.settings.noSchoolDays.count) day\(app.settings.noSchoolDays.count == 1 ? "" : "s") marked")
+                    Spacer()
+                    Button("Mark today off") {
+                        let today = Calendar.current.startOfDay(for: Date())
+                        if !app.settings.noSchoolDays.contains(where: { Calendar.current.isDate($0, inSameDayAs: today) }) {
+                            app.settings.noSchoolDays.append(today)
+                            app.save()
+                        }
+                    }
+                    Button("Clear") {
+                        app.settings.noSchoolDays = []
+                        app.save()
+                    }
+                    .disabled(app.settings.noSchoolDays.isEmpty)
+                }
+                Text("Days off don't break your streak and don't advance the A/B rotation.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func reanchor(isA: Bool) {
+        app.settings.abAnchorDate = Calendar.current.startOfDay(for: Date())
+        app.settings.abAnchorIsA = isA
+        app.save()
+    }
+}
+
+// MARK: - Reminders
+
+private struct ReminderSettings: View {
+    @EnvironmentObject private var app: AppState
+    @StateObject private var notifications = NotificationService.shared
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Remind me about due work", isOn: Binding(
+                    get: { app.settings.remindersEnabled },
+                    set: { app.settings.remindersEnabled = $0; app.save(); reschedule() }
+                ))
+
+                if notifications.authorization != .authorized {
+                    HStack {
+                        Text("Notifications aren't allowed yet.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Allow") {
+                            Task { await notifications.requestAuthorization(); reschedule() }
+                        }
+                    }
+                } else {
+                    HStack {
+                        Text("\(notifications.scheduledCount) reminder\(notifications.scheduledCount == 1 ? "" : "s") scheduled")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Send a test") { Task { await notifications.sendTestNotification() } }
+                    }
+                }
+            }
+
+            Section("When") {
+                Toggle("The night before", isOn: bool(\.eveningBeforeEnabled))
+                if app.settings.eveningBeforeEnabled { timeRow("at", keyPath: \.eveningBeforeMinutes) }
+
+                Toggle("The morning it's due", isOn: bool(\.morningOfEnabled))
+                if app.settings.morningOfEnabled { timeRow("at", keyPath: \.morningOfMinutes) }
+
+                Toggle("Before the due time", isOn: bool(\.hoursBeforeEnabled))
+                if app.settings.hoursBeforeEnabled {
+                    Stepper("\(app.settings.hoursBeforeCount) hour\(app.settings.hoursBeforeCount == 1 ? "" : "s") ahead",
+                            value: int(\.hoursBeforeCount), in: 1...12)
+                    Text("Only applies when an assignment has an actual time, not just a date.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+
+                Toggle("Extra heads-up for tests and projects", isOn: bool(\.bigDealLeadDaysEnabled))
+                if app.settings.bigDealLeadDaysEnabled {
+                    Stepper("\(app.settings.bigDealLeadDays) day\(app.settings.bigDealLeadDays == 1 ? "" : "s") ahead",
+                            value: int(\.bigDealLeadDays), in: 1...14)
+                }
+            }
+
+            Section("Classes") {
+                Toggle("Remind me before a class starts", isOn: bool(\.classStartRemindersEnabled))
+                if app.settings.classStartRemindersEnabled {
+                    Stepper("\(app.settings.classStartLeadMinutes) min before",
+                            value: int(\.classStartLeadMinutes), in: 1...60, step: 5)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .task { await notifications.refreshAuthorizationStatus() }
+    }
+
+    private func timeRow(_ label: String, keyPath: ReferenceWritableKeyPath<AppSettings, Int>) -> some View {
+        DatePicker(
+            label,
+            selection: Binding(
+                get: {
+                    ScheduleEngine.date(Calendar.current.startOfDay(for: Date()),
+                                        atMinutes: app.settings[keyPath: keyPath])
+                },
+                set: {
+                    app.settings[keyPath: keyPath] = ScheduleEngine.minutesIntoDay($0)
+                    app.save()
+                    reschedule()
+                }
+            ),
+            displayedComponents: .hourAndMinute
+        )
+    }
+
+    private func bool(_ keyPath: ReferenceWritableKeyPath<AppSettings, Bool>) -> Binding<Bool> {
+        Binding(
+            get: { app.settings[keyPath: keyPath] },
+            set: { app.settings[keyPath: keyPath] = $0; app.save(); reschedule() }
+        )
+    }
+
+    private func int(_ keyPath: ReferenceWritableKeyPath<AppSettings, Int>) -> Binding<Int> {
+        Binding(
+            get: { app.settings[keyPath: keyPath] },
+            set: { app.settings[keyPath: keyPath] = $0; app.save(); reschedule() }
+        )
+    }
+
+    private func reschedule() {
+        Task { await app.rescheduleReminders() }
+    }
+}
+
+// MARK: - Sync
+
+private struct SyncSettings: View {
+    @EnvironmentObject private var app: AppState
+    @State private var clientSecret: String = ""
+    @State private var isWorking = false
+
+    private var source: ClassroomSource { app.classroom }
+
+    var body: some View {
+        Form {
+            Section("Google Classroom") {
+                if source.isConnected {
+                    LabeledContent("Signed in as", value: app.settings.classroomConnectedEmail.isEmpty
+                                   ? "your school account" : app.settings.classroomConnectedEmail)
+                    if let last = app.settings.classroomLastSyncAt {
+                        LabeledContent("Last sync", value: last.formatted(date: .abbreviated, time: .shortened))
+                    }
+                    if !app.settings.classroomLastSyncSummary.isEmpty {
+                        LabeledContent("Result", value: app.settings.classroomLastSyncSummary)
+                    }
+                    Toggle("Sync automatically while Locker is open", isOn: Binding(
+                        get: { app.settings.classroomAutoSync },
+                        set: { app.settings.classroomAutoSync = $0; app.save() }
+                    ))
+                    HStack {
+                        Button("Sync now") {
+                            Task { isWorking = true; await app.sync(source); isWorking = false }
+                        }
+                        .disabled(isWorking)
+                        Spacer()
+                        Button("Disconnect", role: .destructive) { app.disconnect(source) }
+                    }
+                } else {
+                    Text("Pull classes and assignments straight from Google Classroom. Locker only ever reads — it can't turn anything in or change your work.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+
+                    TextField("OAuth client ID", text: Binding(
+                        get: { app.settings.googleClientID },
+                        set: { app.settings.googleClientID = $0.trimmingCharacters(in: .whitespaces); app.save() }
+                    ))
+                    SecureField("Client secret", text: $clientSecret)
+                        .onChange(of: clientSecret) { _, value in
+                            Keychain.set(value, for: Keychain.googleClientSecret)
+                        }
+
+                    Button(isWorking ? "Waiting for Google…" : "Connect") {
+                        Task { isWorking = true; await app.connect(source); isWorking = false }
+                    }
+                    .disabled(!source.isConfigured || isWorking)
+
+                    Text("Setup steps are in SETUP-GOOGLE.md next to the app.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                }
+
+                if case .failed(let message) = app.syncStatus {
+                    Text(message)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.overdue)
+                        .textSelection(.enabled)
+                }
+            }
+
+            Section("How syncing behaves") {
+                Text("""
+                     New assignments appear automatically, and turning something in on Classroom checks it off here. \
+                     Your notes, priorities, and time estimates are never overwritten. If something is deleted on \
+                     Classroom, Locker keeps it and marks it instead.
+                     """)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear { clientSecret = Keychain.get(Keychain.googleClientSecret) ?? "" }
+    }
+}
+
+// MARK: - Updates
+
+private struct UpdateSettings: View {
+    @EnvironmentObject private var app: AppState
+    @StateObject private var updates = UpdateService.shared
+
+    private var repo: String {
+        app.settings.updateRepo.isEmpty ? UpdateService.defaultRepo : app.settings.updateRepo
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent("Installed version", value: "\(updates.currentVersion) (\(updates.currentBuild))")
+
+                TextField("Update repository", text: Binding(
+                    get: { app.settings.updateRepo },
+                    set: { app.settings.updateRepo = $0; app.save() }
+                ), prompt: Text("owner/repo or a github.com link"))
+
+                Toggle("Check automatically once a day", isOn: Binding(
+                    get: { app.settings.autoCheckForUpdates },
+                    set: { app.settings.autoCheckForUpdates = $0; app.save() }
+                ))
+            }
+
+            Section("Status") {
+                statusRow
+
+                HStack {
+                    Button("Check for updates") {
+                        Task {
+                            app.settings.lastUpdateCheckAt = Date()
+                            app.save()
+                            await updates.check(repo: repo)
+                        }
+                    }
+                    .disabled(isBusy || UpdateService.normalizeRepo(repo).isEmpty)
+
+                    if case .available(let update) = updates.state {
+                        Button("Install \(update.version)") {
+                            Task { await updates.downloadAndInstall(update) }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        Button("Release notes") { updates.openReleasePage(update) }
+                    }
+
+                    if case .readyToRelaunch = updates.state {
+                        Button("Relaunch now") { updates.relaunch() }
+                            .buttonStyle(.borderedProminent)
+                    }
+                    Spacer()
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var isBusy: Bool {
+        switch updates.state {
+        case .checking, .downloading: true
+        default: false
+        }
+    }
+
+    @ViewBuilder
+    private var statusRow: some View {
+        switch updates.state {
+        case .idle:
+            Text(UpdateService.normalizeRepo(repo).isEmpty
+                 ? "Add the repository above to enable updates."
+                 : "Not checked yet.")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+        case .checking:
+            HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Checking…").font(.system(size: 11)) }
+        case .upToDate(let date):
+            Text("Up to date, checked \(date.formatted(date: .omitted, time: .shortened)).")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+        case .available(let update):
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Version \(update.version) is available.")
+                    .font(.system(size: 12, weight: .medium))
+                if !update.notes.isEmpty {
+                    Text(update.notes.prefix(400))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+            }
+        case .downloading(let progress):
+            ProgressView(value: progress) { Text("Downloading…").font(.system(size: 11)) }
+        case .readyToRelaunch:
+            Text("Update installed. Relaunch to use it.")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Theme.done)
+        case .failed(let message):
+            Text(message)
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.overdue)
+                .textSelection(.enabled)
+        }
+    }
+}

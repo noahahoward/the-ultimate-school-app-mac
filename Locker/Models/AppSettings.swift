@@ -1,0 +1,110 @@
+import Foundation
+import SwiftData
+
+/// Single-row settings record. Fetch with `AppSettings.current(in:)`.
+@Model
+final class AppSettings {
+    var hasCompletedOnboarding: Bool = false
+    var studentName: String = ""
+
+    // Schedule
+    var scheduleKindRaw: String = ScheduleKind.weekly.rawValue
+    var firstDayOfSchool: Date?
+    var lastDayOfSchool: Date?
+    /// Anchor for A/B day math: this date is an A day (or B day if `abAnchorIsA` is false).
+    /// Re-anchoring is how the student fixes drift after a snow day — one tap in Settings.
+    var abAnchorDate: Date?
+    var abAnchorIsA: Bool = true
+    /// Weekdays school is in session. Weekends and off days never get an A/B letter.
+    var schoolDaysMask: Int = Weekdays.mask(from: Weekdays.schoolWeek)
+    /// Dates with no school. Stored as start-of-day.
+    var noSchoolDays: [Date] = []
+
+    // Reminders
+    var remindersEnabled: Bool = true
+    var eveningBeforeEnabled: Bool = true
+    /// Minutes from midnight for the evening-before nudge.
+    var eveningBeforeMinutes: Int = 19 * 60
+    var morningOfEnabled: Bool = true
+    var morningOfMinutes: Int = 7 * 60
+    var hoursBeforeEnabled: Bool = true
+    var hoursBeforeCount: Int = 2
+    /// Tests and projects get an extra heads-up this many days out.
+    var bigDealLeadDaysEnabled: Bool = true
+    var bigDealLeadDays: Int = 3
+    var classStartRemindersEnabled: Bool = false
+    var classStartLeadMinutes: Int = 10
+
+    // Focus timer
+    var focusMinutes: Int = 25
+    var shortBreakMinutes: Int = 5
+    var longBreakMinutes: Int = 15
+    var sessionsBeforeLongBreak: Int = 4
+    var focusChimeEnabled: Bool = true
+
+    // Google Classroom
+    var googleClientID: String = ""
+    var classroomAutoSync: Bool = true
+    var classroomLastSyncAt: Date?
+    var classroomLastSyncSummary: String = ""
+    var classroomConnectedEmail: String = ""
+
+    // Updates
+    var updateRepo: String = ""
+    var autoCheckForUpdates: Bool = true
+    var lastUpdateCheckAt: Date?
+
+    // Misc UI
+    var globalHotkeyEnabled: Bool = true
+    var streakBestCount: Int = 0
+
+    init() {}
+
+    var scheduleKind: ScheduleKind {
+        get { ScheduleKind(rawValue: scheduleKindRaw) ?? .weekly }
+        set { scheduleKindRaw = newValue.rawValue }
+    }
+
+    var schoolDays: Set<Int> {
+        get { Weekdays.set(from: schoolDaysMask) }
+        set { schoolDaysMask = Weekdays.mask(from: newValue) }
+    }
+
+    /// Snapshot of everything the pure-Swift domain layer needs, so domain code
+    /// never has to import SwiftData.
+    var scheduleConfig: ScheduleConfig {
+        ScheduleConfig(
+            kind: scheduleKind,
+            schoolDays: schoolDays,
+            abAnchorDate: abAnchorDate,
+            abAnchorIsA: abAnchorIsA,
+            noSchoolDays: noSchoolDays,
+            firstDayOfSchool: firstDayOfSchool,
+            lastDayOfSchool: lastDayOfSchool
+        )
+    }
+
+    var reminderConfig: ReminderConfig {
+        ReminderConfig(
+            enabled: remindersEnabled,
+            eveningBeforeEnabled: eveningBeforeEnabled,
+            eveningBeforeMinutes: eveningBeforeMinutes,
+            morningOfEnabled: morningOfEnabled,
+            morningOfMinutes: morningOfMinutes,
+            hoursBeforeEnabled: hoursBeforeEnabled,
+            hoursBeforeCount: hoursBeforeCount,
+            bigDealLeadDaysEnabled: bigDealLeadDaysEnabled,
+            bigDealLeadDays: bigDealLeadDays
+        )
+    }
+
+    /// Returns the one settings row, creating it on first launch.
+    static func current(in context: ModelContext) -> AppSettings {
+        let existing = try? context.fetch(FetchDescriptor<AppSettings>())
+        if let first = existing?.first { return first }
+        let created = AppSettings()
+        context.insert(created)
+        try? context.save()
+        return created
+    }
+}
