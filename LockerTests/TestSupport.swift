@@ -28,6 +28,7 @@ struct TestClass: ScheduleItem {
     var endMinutes: Int?
     var period: Int?
     var isArchived: Bool = false
+    var semester: Int = 0
 
     init(
         _ name: String,
@@ -36,7 +37,8 @@ struct TestClass: ScheduleItem {
         start: Int? = nil,
         end: Int? = nil,
         period: Int? = nil,
-        archived: Bool = false
+        archived: Bool = false,
+        semester: Int = 0
     ) {
         self.name = name
         self.daysMask = Weekdays.mask(from: days)
@@ -45,5 +47,6 @@ struct TestClass: ScheduleItem {
         self.endMinutes = end
         self.period = period
         self.isArchived = archived
+        self.semester = semester
     }
 }

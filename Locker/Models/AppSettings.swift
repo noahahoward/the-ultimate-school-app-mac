@@ -19,6 +19,9 @@ final class AppSettings {
     var schoolDaysMask: Int = Weekdays.mask(from: Weekdays.schoolWeek)
     /// Dates with no school. Stored as start-of-day.
     var noSchoolDays: [Date] = []
+    /// When the second-semester timetable takes over. Nil means the schedule
+    /// never changes, and every class is treated as running all year.
+    var secondSemesterStart: Date?
 
     // Reminders
     var remindersEnabled: Bool = true
@@ -80,7 +83,8 @@ final class AppSettings {
             abAnchorIsA: abAnchorIsA,
             noSchoolDays: noSchoolDays,
             firstDayOfSchool: firstDayOfSchool,
-            lastDayOfSchool: lastDayOfSchool
+            lastDayOfSchool: lastDayOfSchool,
+            secondSemesterStart: secondSemesterStart
         )
     }
 

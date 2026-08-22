@@ -67,9 +67,15 @@ To poke around the interface without typing in a whole schedule, launch with
 
 ## Adding work from a screenshot
 
-Screenshot any assignment page — Google Classroom, Skyward, Canvas — and drop it
-into Locker (⇧⌘I). It reads the details and shows them for review before anything
-is saved.
+Screenshot an assignment page or your whole schedule — Google Classroom, Skyward,
+Canvas — and drop it into Locker (⇧⌘I). It reads the details and shows them for
+review before anything is saved. Which kind of screenshot it is, is worked out
+from the text: several classes pinned to periods is a schedule, anything else is
+an assignment.
+
+A schedule import reads the course name, period, and semester for every row, and
+handles schools that run a different timetable each semester — Locker then shows
+whichever one is currently running.
 
 The pipeline is deliberately lopsided, because a planner full of wrong dates is
 worse than an empty one:

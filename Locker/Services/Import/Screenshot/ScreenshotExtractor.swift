@@ -18,10 +18,28 @@ enum ExtractionEngine: String, Sendable {
     }
 }
 
+/// Screenshots come in two shapes, and which one this is can be decided from the
+/// text alone: a schedule lists several classes against periods, an assignment
+/// page describes one piece of work.
+enum ScreenshotContent: Sendable {
+    case assignment(ImportDraft)
+    case schedule(ScheduleDraft)
+}
+
 struct ExtractionOutcome: Sendable {
-    var draft: ImportDraft
+    var content: ScreenshotContent
     var engine: ExtractionEngine
     var ocrText: String
+
+    var assignment: ImportDraft? {
+        if case .assignment(let draft) = content { return draft }
+        return nil
+    }
+
+    var schedule: ScheduleDraft? {
+        if case .schedule(let draft) = content { return draft }
+        return nil
+    }
 }
 
 /// Screenshot in, proposed assignment out.
@@ -36,6 +54,17 @@ enum ScreenshotExtractor {
         do {
             let ocr = try ScreenshotOCR.read(image)
 
+            // A timetable is recognisable without any model: several classes each
+            // pinned to a period. Two or more rows is a schedule, not an assignment.
+            let scheduleRows = ScheduleParsing.rows(from: ocr)
+            if scheduleRows.count >= 2 {
+                return .success(ExtractionOutcome(
+                    content: .schedule(ScheduleDraft(rows: scheduleRows)),
+                    engine: .labels,
+                    ocrText: ocr.text
+                ))
+            }
+
             var engine = ExtractionEngine.labels
             var fields = HeuristicExtractor.extract(from: ocr)
 
@@ -46,7 +75,9 @@ enum ScreenshotExtractor {
 
             let checked = EvidenceCheck.verify(fields, against: ocr.text)
             let draft = FieldParsing.draft(from: checked.fields, rejected: checked.rejected, now: now)
-            return .success(ExtractionOutcome(draft: draft, engine: engine, ocrText: ocr.text))
+            return .success(ExtractionOutcome(
+                content: .assignment(draft), engine: engine, ocrText: ocr.text
+            ))
         } catch {
             return .failure(error)
         }

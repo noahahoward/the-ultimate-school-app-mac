@@ -9,6 +9,7 @@ public struct ScheduleConfig: Equatable, Sendable {
     public var noSchoolDays: [Date]
     public var firstDayOfSchool: Date?
     public var lastDayOfSchool: Date?
+    public var secondSemesterStart: Date?
 
     public init(
         kind: ScheduleKind = .weekly,
@@ -17,7 +18,8 @@ public struct ScheduleConfig: Equatable, Sendable {
         abAnchorIsA: Bool = true,
         noSchoolDays: [Date] = [],
         firstDayOfSchool: Date? = nil,
-        lastDayOfSchool: Date? = nil
+        lastDayOfSchool: Date? = nil,
+        secondSemesterStart: Date? = nil
     ) {
         self.kind = kind
         self.schoolDays = schoolDays
@@ -26,6 +28,7 @@ public struct ScheduleConfig: Equatable, Sendable {
         self.noSchoolDays = noSchoolDays
         self.firstDayOfSchool = firstDayOfSchool
         self.lastDayOfSchool = lastDayOfSchool
+        self.secondSemesterStart = secondSemesterStart
     }
 }
 
@@ -38,6 +41,8 @@ public protocol ScheduleItem {
     var period: Int? { get }
     var name: String { get }
     var isArchived: Bool { get }
+    /// 0 = all year, 1 = first semester, 2 = second semester.
+    var semester: Int { get }
 }
 
 public enum DayLetter: String, Sendable {
@@ -62,6 +67,13 @@ public enum ScheduleEngine {
     // MARK: - A/B days
 
     /// The A/B letter for a date, or nil when the school doesn't use them or it isn't a school day.
+    /// Which semester's timetable is in force on a date. Nil when the school
+    /// never switches, in which case every class runs all year.
+    public static func semester(on date: Date, config: ScheduleConfig, calendar: Calendar = .current) -> Int? {
+        guard let start = config.secondSemesterStart else { return nil }
+        return calendar.startOfDay(for: date) < calendar.startOfDay(for: start) ? 1 : 2
+    }
+
     public static func letter(for date: Date, config: ScheduleConfig, calendar: Calendar = .current) -> DayLetter? {
         guard config.kind == .alternatingAB else { return nil }
         guard let anchor = config.abAnchorDate else { return nil }
@@ -118,6 +130,9 @@ public enum ScheduleEngine {
             .filter { item in
                 guard !item.isArchived else { return false }
                 guard item.daysMask & (1 << weekday) != 0 else { return false }
+                // A class tied to one semester disappears when the other is running.
+                if let activeSemester = semester(on: date, config: config, calendar: calendar),
+                   item.semester != 0, item.semester != activeSemester { return false }
                 guard config.kind == .alternatingAB, let dayLetter else { return true }
                 switch item.abDesignation {
                 case .both: return true

@@ -18,6 +18,10 @@ final class SchoolClass {
     var startMinutes: Int?
     var endMinutes: Int?
 
+    /// 0 = runs all year, 1 = first semester only, 2 = second semester only.
+    /// Schools often run a different timetable each semester in the same periods.
+    var semester: Int = 0
+
     var abDesignationRaw: String = ABDesignation.both.rawValue
     var gradingModeRaw: String = GradingMode.weightedCategories.rawValue
     /// Grade the student is aiming for in this class, as a percentage.
@@ -49,6 +53,7 @@ final class SchoolClass {
         startMinutes: Int? = nil,
         endMinutes: Int? = nil,
         abDesignation: ABDesignation = .both,
+        semester: Int = 0,
         sortIndex: Int = 0
     ) {
         self.name = name
@@ -61,6 +66,7 @@ final class SchoolClass {
         self.startMinutes = startMinutes
         self.endMinutes = endMinutes
         self.abDesignationRaw = abDesignation.rawValue
+        self.semester = semester
         self.sortIndex = sortIndex
         self.createdAt = Date()
     }

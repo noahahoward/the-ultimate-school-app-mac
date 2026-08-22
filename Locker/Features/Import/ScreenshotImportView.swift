@@ -14,6 +14,8 @@ struct ScreenshotImportView: View {
     @Query(sort: \SchoolClass.sortIndex) private var classes: [SchoolClass]
 
     @State private var draft: ImportDraft?
+    @State private var schedule: ScheduleDraft?
+    @State private var secondSemesterStart = ScreenshotImportView.defaultSecondSemesterStart()
     @State private var engine: ExtractionEngine?
     @State private var isReading = false
     @State private var errorText: String?
@@ -36,7 +38,13 @@ struct ScreenshotImportView: View {
         VStack(spacing: 0) {
             header
             Divider()
-            if draft == nil { dropZone } else { reviewForm }
+            if let schedule {
+                scheduleReview(schedule)
+            } else if draft == nil {
+                dropZone
+            } else {
+                reviewForm
+            }
             Divider()
             footer
         }
@@ -47,9 +55,7 @@ struct ScreenshotImportView: View {
         HStack {
             VStack(alignment: .leading, spacing: 1) {
                 Text("Add from a screenshot").font(.system(size: 13, weight: .semibold))
-                Text(draft == nil
-                     ? "Works with Google Classroom, Skyward, Canvas — anything on screen."
-                     : (engine?.explanation ?? ""))
+                Text(headerSubtitle)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
@@ -198,19 +204,27 @@ struct ScreenshotImportView: View {
 
     private var footer: some View {
         HStack {
-            if draft != nil {
+            if draft != nil || schedule != nil {
                 Button("Start over") {
                     draft = nil
+                    schedule = nil
                     engine = nil
                     errorText = nil
                 }
             }
             Spacer()
             Button("Cancel") { dismiss() }
-            Button("Add assignment", action: save)
-                .buttonStyle(.borderedProminent)
-                .disabled(draft == nil || title.trimmingCharacters(in: .whitespaces).isEmpty)
-                .keyboardShortcut(.defaultAction)
+            if schedule != nil {
+                Button("Add \(selectedRowCount) class\(selectedRowCount == 1 ? "" : "es")", action: saveSchedule)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(selectedRowCount == 0)
+                    .keyboardShortcut(.defaultAction)
+            } else {
+                Button("Add assignment", action: save)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(draft == nil || title.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .keyboardShortcut(.defaultAction)
+            }
         }
         .padding(12)
     }
@@ -274,11 +288,17 @@ struct ScreenshotImportView: View {
                 isReading = false
                 switch result {
                 case .success(let outcome):
-                    guard outcome.draft.isUsable else {
-                        errorText = "No assignment details were found in that screenshot."
-                        return
+                    switch outcome.content {
+                    case .schedule(let found):
+                        schedule = found
+                        engine = outcome.engine
+                    case .assignment(let found):
+                        guard found.isUsable else {
+                            errorText = "No assignment or schedule details were found in that screenshot."
+                            return
+                        }
+                        apply(outcome, draft: found)
                     }
-                    apply(outcome)
                 case .failure(let error):
                     errorText = error.localizedDescription
                 }
@@ -291,8 +311,7 @@ struct ScreenshotImportView: View {
         errorText = message
     }
 
-    private func apply(_ outcome: ExtractionOutcome) {
-        let incoming = outcome.draft
+    private func apply(_ outcome: ExtractionOutcome, draft incoming: ImportDraft) {
         draft = incoming
         engine = outcome.engine
 
@@ -340,6 +359,138 @@ struct ScreenshotImportView: View {
                 ? ""
                 : "No class is set up with that teacher yet. Choosing one here will remember it."
         }
+    }
+
+    private var headerSubtitle: String {
+        if schedule != nil { return "Found a schedule. Pick which classes to add." }
+        if draft != nil { return engine?.explanation ?? "" }
+        return "Works with Google Classroom, Skyward, Canvas — anything on screen."
+    }
+
+    private var selectedRowCount: Int {
+        schedule?.rows.filter(\.include).count ?? 0
+    }
+
+    private var hasSemesterRows: Bool {
+        schedule?.rows.contains { $0.semester != 0 } ?? false
+    }
+
+    /// Schools split the year around the new year, so that is the sensible
+    /// starting guess for when the second timetable takes over.
+    static func defaultSecondSemesterStart() -> Date {
+        let calendar = Calendar.current
+        let now = Date()
+        var comps = calendar.dateComponents([.year], from: now)
+        // Before the new year, the switch is next January; after it, this one.
+        if (calendar.component(.month, from: now)) >= 7 { comps.year = (comps.year ?? 2026) + 1 }
+        comps.month = 1
+        comps.day = 5
+        return calendar.date(from: comps) ?? now
+    }
+
+    @ViewBuilder
+    private func scheduleReview(_ found: ScheduleDraft) -> some View {
+        Form {
+            Section {
+                ForEach(Array(found.rows.enumerated()), id: \.element.id) { index, row in
+                    HStack(spacing: 8) {
+                        Toggle("", isOn: Binding(
+                            get: { schedule?.rows[index].include ?? false },
+                            set: { schedule?.rows[index].include = $0 }
+                        ))
+                        .labelsHidden()
+
+                        VStack(alignment: .leading, spacing: 1) {
+                            TextField("Class name", text: Binding(
+                                get: { schedule?.rows[index].name ?? "" },
+                                set: { schedule?.rows[index].name = $0 }
+                            ))
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 12, weight: .medium))
+
+                            Text(row.sourceLine)
+                                .font(Theme.data(10))
+                                .foregroundStyle(.tertiary)
+                                .lineLimit(1)
+                        }
+
+                        Spacer(minLength: 0)
+
+                        if let period = row.period {
+                            Chip(text: "P\(period)", tint: Theme.accent)
+                        }
+                        Chip(text: row.semesterLabel)
+                    }
+                    .padding(.vertical, 1)
+                }
+            } header: {
+                HStack {
+                    Text("Classes found")
+                    Spacer()
+                    Button(selectedRowCount == found.rows.count ? "Deselect all" : "Select all") {
+                        let turnOn = selectedRowCount != found.rows.count
+                        for index in schedule?.rows.indices ?? (0..<0) {
+                            schedule?.rows[index].include = turnOn
+                        }
+                    }
+                    .buttonStyle(.link)
+                    .font(.system(size: 11))
+                }
+            } footer: {
+                Text("Each line shows the text it came from. Names and periods can be edited here, and days and times can be set afterwards in Classes.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+
+            if hasSemesterRows {
+                Section {
+                    DatePicker("Second semester starts", selection: $secondSemesterStart, displayedComponents: .date)
+                } footer: {
+                    Text("This schedule runs a different timetable each semester. Locker shows whichever one is running, so it needs to know when they change over.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func saveSchedule() {
+        guard let schedule else { return }
+        let existing = app.allClasses(includeArchived: true)
+        var created = 0
+
+        for row in schedule.rows where row.include {
+            let name = row.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { continue }
+
+            // Re-importing a schedule shouldn't duplicate what is already set up.
+            if existing.contains(where: { SyncMerger.namesMatch($0.name, name) && $0.semester == row.semester }) {
+                continue
+            }
+
+            let schoolClass = SchoolClass(
+                name: name,
+                teacher: row.teacher,
+                room: row.room,
+                period: row.period,
+                colorHex: ClassPalette.hex(forIndex: existing.count + created),
+                daysMask: Weekdays.mask(from: Weekdays.schoolWeek),
+                startMinutes: row.startMinutes,
+                endMinutes: row.endMinutes,
+                semester: row.semester,
+                sortIndex: row.period ?? (existing.count + created)
+            )
+            app.context.insert(schoolClass)
+            created += 1
+        }
+
+        if hasSemesterRows {
+            app.settings.secondSemesterStart = Calendar.current.startOfDay(for: secondSemesterStart)
+        }
+        app.save()
+        Task { await app.rescheduleReminders() }
+        dismiss()
     }
 
     private func save() {
