@@ -65,6 +65,15 @@ xcodebuild -project Locker.xcodeproj -scheme Locker -destination 'platform=macOS
 To poke around the interface without typing in a whole schedule, launch with
 `LOCKER_SEED=1` set and it will fill an empty database with a sample week.
 
+## Icon
+
+The app icon is an [Icon Composer](https://developer.apple.com/documentation/xcode/creating-your-app-icon-using-icon-composer)
+document at `Locker/Resources/Locker.icon`. To replace it:
+
+```sh
+./scripts/use-icon.sh /path/to/YourIcon.icon
+```
+
 ## Google Classroom
 
 Optional, read-only, and set up in Settings → Sync. See

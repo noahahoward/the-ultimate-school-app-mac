@@ -1,0 +1,183 @@
+{
+  "fill" : {
+    "solid" : "display-p3:0.97227,1.00000,0.99815,1.00000"
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "fill-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : {
+                "solid" : "extended-srgb:1.00000,0.21961,0.23529,1.00000"
+              }
+            }
+          ],
+          "image-name" : "nobg4.png",
+          "name" : "nobg4",
+          "opacity-specializations" : [
+            {
+              "value" : 0.73
+            },
+            {
+              "appearance" : "dark",
+              "value" : 0.84
+            }
+          ],
+          "position-specializations" : [
+            {
+              "idiom" : "square",
+              "value" : {
+                "scale" : 2,
+                "translation-in-points" : [
+                  78.2,
+                  49.5859375
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "image-name" : "nobg3.png",
+          "name" : "nobg3",
+          "opacity-specializations" : [
+            {
+              "value" : 0.27
+            },
+            {
+              "appearance" : "dark",
+              "value" : 0
+            }
+          ],
+          "position-specializations" : [
+            {
+              "idiom" : "square",
+              "value" : {
+                "scale" : 2,
+                "translation-in-points" : [
+                  78.25,
+                  52.5859375
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "image-name" : "nobg2.png",
+          "name" : "nobg2",
+          "opacity-specializations" : [
+            {
+              "value" : 0.36
+            },
+            {
+              "appearance" : "dark",
+              "value" : 0.46
+            }
+          ],
+          "position-specializations" : [
+            {
+              "value" : {
+                "scale" : 1,
+                "translation-in-points" : [
+                  -56.890625,
+                  -140.1640625
+                ]
+              }
+            },
+            {
+              "idiom" : "square",
+              "value" : {
+                "scale" : 2,
+                "translation-in-points" : [
+                  78.2,
+                  53.5859375
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "blend-mode-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : "normal"
+            }
+          ],
+          "fill-specializations" : [
+            {
+              "value" : {
+                "solid" : "srgb:0.00000,0.53333,1.00000,0.64062"
+              }
+            },
+            {
+              "appearance" : "dark",
+              "value" : {
+                "linear-gradient" : [
+                  "extended-gray:1.00000,1.00000",
+                  "extended-srgb:0.00000,0.53333,1.00000,1.00000"
+                ],
+                "orientation" : {
+                  "start" : {
+                    "x" : 0.5,
+                    "y" : 0
+                  },
+                  "stop" : {
+                    "x" : 0.5,
+                    "y" : 0.7
+                  }
+                }
+              }
+            }
+          ],
+          "glass" : true,
+          "image-name" : "nobg1.png",
+          "name" : "nobg1",
+          "opacity-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : 1
+            }
+          ],
+          "position-specializations" : [
+            {
+              "value" : {
+                "scale" : 1,
+                "translation-in-points" : [
+                  -49.890625,
+                  -43.2109375
+                ]
+              }
+            },
+            {
+              "idiom" : "square",
+              "value" : {
+                "scale" : 6,
+                "translation-in-points" : [
+                  894.640625,
+                  896.484375
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : [
+      "macOS"
+    ]
+  }
+}
