@@ -24,6 +24,9 @@ struct ScreenshotImportView: View {
     @State private var lastImage: CGImage?
     @State private var lastOCRText = ""
     @State private var lastLines: [OCRLine] = []
+    @State private var duplicate: DuplicateDetector.Match?
+    @State private var duplicateOverridden = false
+    @State private var scheduleDuplicates: [UUID: DuplicateDetector.Match] = [:]
 
     // Editable copies, so a misread can be corrected before saving.
     @State private var title = ""
@@ -78,11 +81,23 @@ struct ScreenshotImportView: View {
                 ProgressView().controlSize(.small)
                 Text("Reading the screenshot…").font(.system(size: 12)).foregroundStyle(.secondary)
             } else {
-                Text("Drop a screenshot here").font(Theme.display(15))
-                Text("or paste one with ⌘V").font(.system(size: 12)).foregroundStyle(.secondary)
+                Text("Grab it off the screen").font(Theme.display(15))
+                Text("Locker reads the details and shows them before saving.")
+                    .font(.system(size: 12)).foregroundStyle(.secondary)
+
+                Button(action: captureFromScreen) {
+                    Label("Capture screenshot", systemImage: "camera.viewfinder")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .padding(.top, 4)
+
+                Text("or drop an image here, paste with ⌘V")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
                 Button("Choose a file…", action: chooseFile)
+                    .buttonStyle(.link)
                     .controlSize(.small)
-                    .padding(.top, 2)
             }
             if let errorText {
                 Text(errorText)
@@ -107,15 +122,46 @@ struct ScreenshotImportView: View {
         .onPasteCommand(of: [.image, .fileURL]) { providers in
             load(from: providers)
         }
-        .onAppear { readClipboardIfImage() }
+        .onAppear {
+            if !app.droppedProviders.isEmpty {
+                let providers = app.droppedProviders
+                app.droppedProviders = []
+                load(from: providers)
+            } else {
+                readClipboardIfImage()
+            }
+        }
     }
 
     @ViewBuilder
     private var reviewForm: some View {
         if let draft {
             Form {
+                if let duplicate {
+                    Section {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: duplicate.confidence == .certain
+                                  ? "exclamationmark.triangle.fill" : "questionmark.circle.fill")
+                                .foregroundStyle(duplicate.confidence == .certain ? Theme.overdue : Theme.highlighterDeep)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(duplicate.confidence == .certain
+                                     ? "You already have this"
+                                     : "This might already be on your list")
+                                    .font(.system(size: 12, weight: .semibold))
+                                Text(duplicate.reason)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.secondary)
+                                Toggle("Add it anyway", isOn: $duplicateOverridden)
+                                    .font(.system(size: 11))
+                                    .padding(.top, 2)
+                            }
+                        }
+                    }
+                }
+
                 Section("What will be added") {
                     TextField("Title", text: $title)
+                        .onChange(of: title) { _, _ in checkForDuplicate() }
 
                     Picker("Class", selection: $selectedClassID) {
                         Text("None").tag(nil as PersistentIdentifier?)
@@ -123,6 +169,7 @@ struct ScreenshotImportView: View {
                             Text(schoolClass.name).tag(schoolClass.persistentModelID as PersistentIdentifier?)
                         }
                     }
+                    .onChange(of: selectedClassID) { _, _ in checkForDuplicate() }
                     if !matchNote.isEmpty {
                         Text(matchNote)
                             .font(.system(size: 11))
@@ -232,13 +279,32 @@ struct ScreenshotImportView: View {
                     .disabled(selectedRowCount == 0)
                     .keyboardShortcut(.defaultAction)
             } else {
-                Button("Add assignment", action: save)
+                Button(duplicate?.confidence == .certain && duplicateOverridden ? "Add anyway" : "Add assignment",
+                       action: save)
                     .buttonStyle(.borderedProminent)
-                    .disabled(draft == nil || title.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(draft == nil
+                              || title.trimmingCharacters(in: .whitespaces).isEmpty
+                              || (duplicate?.confidence == .certain && !duplicateOverridden))
                     .keyboardShortcut(.defaultAction)
             }
         }
         .padding(12)
+    }
+
+    /// Hands over to the system crosshair, then reads whatever was selected.
+    private func captureFromScreen() {
+        errorText = nil
+        Task {
+            do {
+                let image = try await ScreenCapture.selectArea()
+                await MainActor.run { read(NSImage(cgImage: image, size: .zero)) }
+            } catch {
+                await MainActor.run {
+                    if case ScreenCapture.Failure.cancelled = error { return }
+                    errorText = error.localizedDescription
+                }
+            }
+        }
     }
 
     private func chooseFile() {
@@ -303,8 +369,9 @@ struct ScreenshotImportView: View {
                 case .success(let outcome):
                     switch outcome.content {
                     case .schedule(let found):
-                        schedule = found
+                        schedule = applyRememberedColumns(to: found)
                         engine = outcome.engine
+                        checkScheduleDuplicates()
                     case .assignment(let found):
                         guard found.isUsable else {
                             errorText = "No assignment or schedule details were found in that screenshot."
@@ -344,6 +411,52 @@ struct ScreenshotImportView: View {
         if !incoming.attachments.isEmpty { lines.append("Attached: " + incoming.attachments.joined(separator: ", ")) }
         if !incoming.teacher.isEmpty { lines.append("Posted by \(incoming.teacher)") }
         notes = lines.joined(separator: "\n")
+        duplicateOverridden = false
+        checkForDuplicate()
+    }
+
+    /// Looks for work already in Locker that this screenshot would duplicate.
+    private func checkForDuplicate() {
+        let candidates = app.allAssignments().map {
+            DuplicateDetector.AssignmentCandidate(
+                id: $0.idString,
+                title: $0.title,
+                classID: $0.schoolClass?.idString,
+                dueAt: $0.dueAt,
+                isDone: $0.isDone
+            )
+        }
+        let chosenClass = classes.first { $0.persistentModelID == selectedClassID }
+        duplicate = DuplicateDetector.assignment(
+            title: title,
+            classID: chosenClass?.idString,
+            dueAt: hasDueDate ? dueDate : nil,
+            among: candidates
+        )
+    }
+
+    /// Marks which schedule rows are classes already set up.
+    private func checkScheduleDuplicates() {
+        guard let schedule else { return }
+        let candidates = app.allClasses(includeArchived: true).map {
+            DuplicateDetector.ClassCandidate(
+                id: $0.idString, name: $0.name, semester: $0.semester, period: $0.period
+            )
+        }
+        var found: [UUID: DuplicateDetector.Match] = [:]
+        var updated = schedule
+        for index in updated.rows.indices {
+            let row = updated.rows[index]
+            guard let match = DuplicateDetector.schoolClass(
+                name: row.name, semester: row.semester, period: row.period, among: candidates
+            ) else { continue }
+            found[row.id] = match
+            // Already-added classes start unticked rather than being hidden, so
+            // re-importing a schedule is safe but the choice stays visible.
+            if match.confidence == .certain { updated.rows[index].include = false }
+        }
+        scheduleDuplicates = found
+        self.schedule = updated
     }
 
     /// Picks the class this assignment belongs to, and says how it decided.
@@ -447,15 +560,24 @@ struct ScreenshotImportView: View {
                         VStack(alignment: .leading, spacing: 1) {
                             TextField("Class name", text: Binding(
                                 get: { schedule?.rows[index].name ?? "" },
-                                set: { schedule?.rows[index].name = $0 }
+                                set: { schedule?.rows[index].name = $0; checkScheduleDuplicates() }
                             ))
                             .textFieldStyle(.plain)
                             .font(.system(size: 12, weight: .medium))
 
-                            Text(row.sourceLine)
-                                .font(Theme.data(10))
-                                .foregroundStyle(.tertiary)
-                                .lineLimit(1)
+                            if let match = scheduleDuplicates[row.id] {
+                                Text(match.confidence == .certain
+                                     ? "Already in your classes — tick to add a second copy"
+                                     : match.reason)
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(match.confidence == .certain ? Theme.overdue : Theme.highlighterDeep)
+                                    .lineLimit(1)
+                            } else {
+                                Text(row.sourceLine)
+                                    .font(Theme.data(10))
+                                    .foregroundStyle(.tertiary)
+                                    .lineLimit(1)
+                            }
                         }
 
                         Spacer(minLength: 0)
@@ -570,12 +692,25 @@ struct ScreenshotImportView: View {
         .formStyle(.grouped)
     }
 
+    /// Reuses a column labelling the student corrected for this layout before.
+    private func applyRememberedColumns(to found: ScheduleDraft) -> ScheduleDraft {
+        guard let table = found.table,
+              let remembered = LayoutMemory.roles(for: table, saved: app.settings.savedColumnLayouts)
+        else { return found }
+
+        var updated = found
+        updated.roles = remembered
+        updated.rows = TableScheduleBuilder.rows(from: table, roles: remembered)
+        return updated
+    }
+
     /// Rebuilds the class list after a column is reassigned.
     private func remapColumns() {
         guard let current = schedule, let table = current.table else { return }
         var rebuilt = current
         rebuilt.rows = TableScheduleBuilder.rows(from: table, roles: current.roles)
         schedule = rebuilt
+        checkScheduleDuplicates()
     }
 
     private func saveSchedule() {
@@ -587,10 +722,8 @@ struct ScreenshotImportView: View {
             let name = row.name.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty else { continue }
 
-            // Re-importing a schedule shouldn't duplicate what is already set up.
-            if existing.contains(where: { SyncMerger.namesMatch($0.name, name) && $0.semester == row.semester }) {
-                continue
-            }
+            // Ticked rows are added even when they look like duplicates: the
+            // student saw the warning and chose to.
 
             let schoolClass = SchoolClass(
                 name: name,
@@ -610,6 +743,14 @@ struct ScreenshotImportView: View {
 
         if hasSemesterRows {
             app.settings.secondSemesterStart = Calendar.current.startOfDay(for: secondSemesterStart)
+        }
+
+        // Keep the column labelling so the next screenshot of this layout is
+        // read correctly without being corrected again.
+        if let table = schedule.table, schedule.isColumnMapped {
+            app.settings.savedColumnLayouts = LayoutMemory.remember(
+                roles: schedule.roles, for: table, in: app.settings.savedColumnLayouts
+            )
         }
         app.save()
         Task { await app.rescheduleReminders() }

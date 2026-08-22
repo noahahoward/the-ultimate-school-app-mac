@@ -57,6 +57,8 @@ final class AppState: ObservableObject {
     @Published var activeSheet: ActiveSheet?
     @Published var settingsTab: SettingsTab = .general
     @Published var quickAddSeedText = ""
+    /// Set when a screenshot is dropped on the window, consumed by the import sheet.
+    @Published var droppedProviders: [NSItemProvider] = []
     @Published var syncStatus: SyncStatus = .idle
     @Published var selectedClassID: PersistentIdentifier?
     @Published var lastError: String?

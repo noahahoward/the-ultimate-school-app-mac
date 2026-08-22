@@ -161,3 +161,83 @@ final class TableDetectorTests: XCTestCase {
         XCTAssertTrue(ColumnRoleGuesser.matches("3", role: .period))
     }
 }
+
+/// The column labelling is remembered per layout, so correcting a misread source
+/// fixes every future screenshot from it rather than just the one in hand.
+final class LayoutMemoryTests: XCTestCase {
+
+    func lines(_ rows: [[String]], columnStarts: [Double]) -> [OCRLine] {
+        var result: [OCRLine] = []
+        for (rowIndex, row) in rows.enumerated() {
+            let y = 0.9 - Double(rowIndex) * 0.08
+            for (columnIndex, text) in row.enumerated() where !text.isEmpty {
+                result.append(OCRLine(
+                    text: text,
+                    box: CGRect(x: columnStarts[columnIndex], y: y,
+                                width: max(0.015, 0.012 * Double(text.count)), height: 0.03)
+                ))
+            }
+        }
+        return result
+    }
+
+    var table: DetectedTable {
+        TableDetector.detect(lines([
+            ["1", "ENGLISH 9", "210", "SMITH, J"],
+            ["2", "ALGEBRA I", "118", "OKAFOR, D"],
+            ["3", "PHYSICAL SCIENCE", "305", "REYES, M"],
+        ], columnStarts: [0.04, 0.14, 0.42, 0.60]))
+    }
+
+    func testTheFingerprintDescribesShapeNotContent() {
+        // The same page captured later holds different values but the same shape.
+        let later = TableDetector.detect(lines([
+            ["4", "WORLD HISTORY", "412", "DUNN, T"],
+            ["5", "STUDIO ART", "150", "BOYD, R"],
+            ["6", "SPANISH II", "233", "LOPEZ, M"],
+        ], columnStarts: [0.04, 0.14, 0.42, 0.60]))
+        XCTAssertEqual(LayoutMemory.fingerprint(of: table), LayoutMemory.fingerprint(of: later))
+    }
+
+    func testADifferentLayoutGetsADifferentFingerprint() {
+        let other = TableDetector.detect(lines([
+            ["9:02-9:54", "BIOLOGY"],
+            ["10:05-10:57", "CHEMISTRY"],
+        ], columnStarts: [0.04, 0.30]))
+        XCTAssertNotEqual(LayoutMemory.fingerprint(of: table), LayoutMemory.fingerprint(of: other))
+    }
+
+    func testACorrectedLabellingComesBackForTheSameLayout() {
+        let corrected: [ColumnRole] = [.period, .className, .room, .teacher]
+        let saved = LayoutMemory.remember(roles: corrected, for: table, in: [])
+        XCTAssertEqual(LayoutMemory.roles(for: table, saved: saved), corrected)
+    }
+
+    func testCorrectingTheSameLayoutTwiceReplacesTheOldLabelling() {
+        var saved = LayoutMemory.remember(roles: [.period, .className, .room, .teacher], for: table, in: [])
+        saved = LayoutMemory.remember(roles: [.ignore, .className, .period, .teacher], for: table, in: saved)
+        XCTAssertEqual(saved.count, 1)
+        XCTAssertEqual(LayoutMemory.roles(for: table, saved: saved)?[2], .period)
+    }
+
+    func testAnUnknownLayoutHasNothingRemembered() {
+        XCTAssertNil(LayoutMemory.roles(for: table, saved: []))
+    }
+
+    func testALabellingForADifferentNumberOfColumnsIsIgnored() {
+        // A remembered mapping from a narrower table must not be forced onto
+        // this one, or columns would land on the wrong fields.
+        let stale = [SavedColumnLayout(fingerprint: LayoutMemory.fingerprint(of: table),
+                                       roles: ["className", "period"])]
+        XCTAssertNil(LayoutMemory.roles(for: table, saved: stale))
+    }
+
+    func testOnlyAHandfulOfLayoutsAreKept() {
+        var saved: [SavedColumnLayout] = (0..<20).map {
+            SavedColumnLayout(fingerprint: "shape-\($0)", roles: ["className"])
+        }
+        saved = LayoutMemory.remember(roles: [.period, .className, .room, .teacher], for: table, in: saved)
+        XCTAssertLessThanOrEqual(saved.count, 12)
+        XCTAssertNotNil(LayoutMemory.roles(for: table, saved: saved), "the newest labelling must survive")
+    }
+}

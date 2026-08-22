@@ -124,22 +124,38 @@ struct TodayView: View {
 
     // MARK: - Pieces
 
+    /// Capture leads, because reading a screenshot is both faster and more
+    /// accurate than typing an assignment out.
     private var quickAddField: some View {
         Panel(padding: 12) {
-            HStack(spacing: 10) {
-                Image(systemName: "plus.circle.fill")
-                    .foregroundStyle(Theme.accent)
-                    .font(.system(size: 15))
+            VStack(spacing: 10) {
+                HStack(spacing: 10) {
+                    Button {
+                        app.activeSheet = .screenshotImport
+                    } label: {
+                        Label("Add from a screenshot", systemImage: "camera.viewfinder")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .help("Capture an assignment or your schedule (⇧⌘I)")
+                }
 
-                TextField("Add work — try “bio lab report due fri”", text: $quickText)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13))
-                    .onSubmit(submitQuickAdd)
+                HStack(spacing: 10) {
+                    Image(systemName: "text.cursor")
+                        .foregroundStyle(.tertiary)
+                        .font(.system(size: 12))
 
-                if !quickText.isEmpty {
-                    Button("Add", action: submitQuickAdd)
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
+                    TextField("or type it — “bio lab report due fri”", text: $quickText)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13))
+                        .onSubmit(submitQuickAdd)
+
+                    if !quickText.isEmpty {
+                        Button("Add", action: submitQuickAdd)
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                    }
                 }
             }
         }

@@ -52,6 +52,9 @@ final class AppSettings {
     var classroomLastSyncSummary: String = ""
     var classroomConnectedEmail: String = ""
 
+    /// Column labellings the student has corrected, reused for the same layout.
+    var savedColumnLayouts: [SavedColumnLayout] = []
+
     // Updates
     var updateRepo: String = ""
     var autoCheckForUpdates: Bool = true

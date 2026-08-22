@@ -4,6 +4,7 @@ import SwiftData
 struct ContentView: View {
     @EnvironmentObject private var app: AppState
     @Environment(\.openSettings) private var openSettings
+    @State private var isDropTargeted = false
 
     var body: some View {
         NavigationSplitView {
@@ -54,6 +55,22 @@ struct ContentView: View {
                 }
         }
         .frame(minWidth: 940, minHeight: 620)
+        // Dropping a screenshot anywhere in the window starts an import, so the
+        // student never has to find the right button first.
+        .onDrop(of: [.image, .fileURL], isTargeted: $isDropTargeted) { providers in
+            guard app.activeSheet == nil else { return false }
+            app.droppedProviders = providers
+            app.activeSheet = .screenshotImport
+            return true
+        }
+        .overlay {
+            if isDropTargeted {
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(Theme.accent, style: StrokeStyle(lineWidth: 3, dash: [8, 5]))
+                    .padding(6)
+                    .allowsHitTesting(false)
+            }
+        }
         .sheet(item: $app.activeSheet) { sheet in
             switch sheet {
             case .onboarding: OnboardingView().environmentObject(app)
