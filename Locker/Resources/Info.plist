@@ -26,9 +26,5 @@
 	<string>Locker</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.education</string>
-	<key>NSSupportsAutomaticTermination</key>
-	<true/>
-	<key>NSSupportsSuddenTermination</key>
-	<true/>
 </dict>
 </plist>
