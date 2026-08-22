@@ -28,6 +28,9 @@ struct ScreenshotImportView: View {
     @State private var type: AssignmentType = .homework
     @State private var maxPoints: Double?
     @State private var markDone = false
+    @State private var matchNote = ""
+    /// The teacher the screenshot named, kept so it can be saved onto the class.
+    @State private var screenshotTeacher = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -109,6 +112,11 @@ struct ScreenshotImportView: View {
                         ForEach(classes.filter { !$0.isArchived }) { schoolClass in
                             Text(schoolClass.name).tag(schoolClass.persistentModelID as PersistentIdentifier?)
                         }
+                    }
+                    if !matchNote.isEmpty {
+                        Text(matchNote)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
                     }
 
                     Picker("Type", selection: $type) {
@@ -294,7 +302,8 @@ struct ScreenshotImportView: View {
         markDone = incoming.isTurnedIn == true
         hasDueDate = incoming.dueAt != nil
         dueDate = incoming.dueAt ?? Date()
-        selectedClassID = matchClass(named: incoming.className, teacher: incoming.teacher)?.persistentModelID
+        screenshotTeacher = incoming.teacher
+        applyClassMatch(className: incoming.className, teacher: incoming.teacher)
 
         var lines: [String] = []
         if !incoming.summary.isEmpty { lines.append(incoming.summary) }
@@ -303,15 +312,34 @@ struct ScreenshotImportView: View {
         notes = lines.joined(separator: "\n")
     }
 
-    /// Matches the screenshot's class against one already set up, by name or by
-    /// the teacher who posted it.
-    private func matchClass(named name: String, teacher: String) -> SchoolClass? {
+    /// Picks the class this assignment belongs to, and says how it decided.
+    ///
+    /// A screenshot usually names the teacher rather than the course, so the
+    /// teacher recorded on each class is often the only way back to it.
+    private func applyClassMatch(className: String, teacher: String) {
         let active = classes.filter { !$0.isArchived }
-        if !name.isEmpty, let match = active.first(where: { SyncMerger.namesMatch($0.name, name) }) { return match }
-        if !teacher.isEmpty, let match = active.first(where: {
-            !$0.teacher.isEmpty && $0.teacher.localizedCaseInsensitiveContains(teacher)
-        }) { return match }
-        return nil
+        let candidates = active.map {
+            ClassMatcher.Candidate(id: $0.idString, name: $0.name, teacher: $0.teacher, aliases: $0.aliases)
+        }
+
+        switch ClassMatcher.match(className: className, teacher: teacher, in: candidates) {
+        case .matched(let id, let reason):
+            let matched = active.first { $0.idString == id }
+            selectedClassID = matched?.persistentModelID
+            matchNote = "Picked because it \(reason.rawValue)."
+
+        case .ambiguous(let ids, let reason):
+            // Two classes fit equally well, so choosing one would be a coin flip.
+            selectedClassID = nil
+            let names = active.filter { ids.contains($0.idString) }.map(\.name)
+            matchNote = "More than one class \(reason.rawValue) (\(names.joined(separator: ", "))). Pick the right one."
+
+        case .none:
+            selectedClassID = nil
+            matchNote = teacher.isEmpty
+                ? ""
+                : "No class is set up with that teacher yet. Choosing one here will remember it."
+        }
     }
 
     private func save() {
@@ -325,6 +353,14 @@ struct ScreenshotImportView: View {
         )
         assignment.maxScore = maxPoints
         if markDone { assignment.setDone(true) }
+
+        // Teach the class its teacher, so the next screenshot from the same
+        // teacher files itself without being asked.
+        if let schoolClass = assignment.schoolClass,
+           schoolClass.teacher.trimmingCharacters(in: .whitespaces).isEmpty,
+           !screenshotTeacher.isEmpty {
+            schoolClass.teacher = screenshotTeacher
+        }
 
         app.context.insert(assignment)
         app.save()
