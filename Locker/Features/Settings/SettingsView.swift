@@ -341,10 +341,17 @@ private struct UpdateSettings: View {
             Section {
                 LabeledContent("Installed version", value: "\(updates.currentVersion) (\(updates.currentBuild))")
 
+                // An empty field falls back to the repo built into the app, so the
+                // placeholder shows that rather than looking unconfigured.
                 TextField("Update repository", text: Binding(
                     get: { app.settings.updateRepo },
                     set: { app.settings.updateRepo = $0; app.save() }
-                ), prompt: Text("owner/repo or a github.com link"))
+                ), prompt: Text(UpdateService.defaultRepo.isEmpty
+                                ? "owner/repo or a github.com link"
+                                : UpdateService.defaultRepo))
+
+                LabeledContent("Checking", value: UpdateService.normalizeRepo(repo).isEmpty
+                               ? "not set" : UpdateService.normalizeRepo(repo))
 
                 Toggle("Check automatically once a day", isOn: Binding(
                     get: { app.settings.autoCheckForUpdates },
