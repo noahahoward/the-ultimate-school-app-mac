@@ -35,15 +35,7 @@ struct LockerApp: App {
                     .keyboardShortcut("n", modifiers: .command)
             }
             CommandGroup(after: .appInfo) {
-                Button("Check for Updates…") {
-                    app.section = .today
-                    Task {
-                        let repo = app.settings.updateRepo.isEmpty
-                            ? UpdateService.defaultRepo : app.settings.updateRepo
-                        await UpdateService.shared.check(repo: repo)
-                    }
-                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-                }
+                CheckForUpdatesMenuItem(app: app)
             }
             CommandMenu("Sync") {
                 Button("Sync Now") { Task { await app.syncAll() } }
@@ -82,6 +74,29 @@ struct LockerApp: App {
             }
             state.context.insert(session)
             state.save()
+        }
+    }
+}
+
+
+/// Opens Settings on the Updates tab and starts a check.
+///
+/// `openSettings` is only available to views, which is why this is a view rather
+/// than a plain button in the command group. It replaces a private
+/// `showSettingsWindow:` selector that was never a supported entry point.
+private struct CheckForUpdatesMenuItem: View {
+    @Environment(\.openSettings) private var openSettings
+    let app: AppState
+
+    var body: some View {
+        Button("Check for Updates…") {
+            app.settingsTab = .updates
+            openSettings()
+            Task {
+                let repo = app.settings.updateRepo.isEmpty
+                    ? UpdateService.defaultRepo : app.settings.updateRepo
+                await UpdateService.shared.check(repo: repo)
+            }
         }
     }
 }

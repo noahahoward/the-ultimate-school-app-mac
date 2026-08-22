@@ -3,6 +3,7 @@ import SwiftData
 
 struct ContentView: View {
     @EnvironmentObject private var app: AppState
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         NavigationSplitView {
@@ -13,7 +14,26 @@ struct ContentView: View {
                 }
             }
             .navigationSplitViewColumnWidth(min: 170, ideal: 190, max: 240)
-            .safeAreaInset(edge: .bottom) { syncFooter }
+            .safeAreaInset(edge: .bottom) {
+                VStack(alignment: .leading, spacing: 0) {
+                    syncFooter
+                    Divider()
+                    Button {
+                        app.settingsTab = .general
+                        openSettings()
+                    } label: {
+                        Label("Settings", systemImage: "gearshape")
+                            .font(.system(size: 12))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .keyboardShortcut(",", modifiers: .command)
+                    .help("Settings (⌘,)")
+                }
+            }
         } detail: {
             detail
                 .toolbar {

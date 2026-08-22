@@ -31,6 +31,11 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
+enum SettingsTab: String, CaseIterable, Identifiable, Hashable {
+    case general, schedule, reminders, sync, updates
+    var id: String { rawValue }
+}
+
 /// SwiftUI honours only one `.sheet` per view, so every modal goes through here.
 enum ActiveSheet: String, Identifiable {
     case onboarding, quickAdd
@@ -50,6 +55,7 @@ final class AppState: ObservableObject {
 
     @Published var section: AppSection = .today
     @Published var activeSheet: ActiveSheet?
+    @Published var settingsTab: SettingsTab = .general
     @Published var quickAddSeedText = ""
     @Published var syncStatus: SyncStatus = .idle
     @Published var selectedClassID: PersistentIdentifier?

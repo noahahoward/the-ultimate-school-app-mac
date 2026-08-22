@@ -5,12 +5,17 @@ struct SettingsView: View {
     @EnvironmentObject private var app: AppState
 
     var body: some View {
-        TabView {
-            GeneralSettings().tabItem { Label("General", systemImage: "gearshape") }
-            ScheduleSettings().tabItem { Label("Schedule", systemImage: "calendar") }
-            ReminderSettings().tabItem { Label("Reminders", systemImage: "bell") }
-            SyncSettings().tabItem { Label("Sync", systemImage: "arrow.triangle.2.circlepath") }
-            UpdateSettings().tabItem { Label("Updates", systemImage: "arrow.down.circle") }
+        TabView(selection: $app.settingsTab) {
+            GeneralSettings()
+                .tabItem { Label("General", systemImage: "gearshape") }.tag(SettingsTab.general)
+            ScheduleSettings()
+                .tabItem { Label("Schedule", systemImage: "calendar") }.tag(SettingsTab.schedule)
+            ReminderSettings()
+                .tabItem { Label("Reminders", systemImage: "bell") }.tag(SettingsTab.reminders)
+            SyncSettings()
+                .tabItem { Label("Sync", systemImage: "arrow.triangle.2.circlepath") }.tag(SettingsTab.sync)
+            UpdateSettings()
+                .tabItem { Label("Updates", systemImage: "arrow.down.circle") }.tag(SettingsTab.updates)
         }
         .frame(width: 520, height: 470)
     }
