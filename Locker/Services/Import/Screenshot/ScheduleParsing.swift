@@ -11,6 +11,9 @@ struct ClassDraft: Equatable, Identifiable, Sendable {
     var room = ""
     var startMinutes: Int?
     var endMinutes: Int?
+    /// Nil when the schedule doesn't print meeting days, in which case the
+    /// import falls back to a normal school week.
+    var weekdays: Set<Int>?
     /// The line this came from, shown in review so a misread is obvious.
     var sourceLine = ""
     var include = true

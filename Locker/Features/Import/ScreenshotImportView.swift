@@ -20,6 +20,9 @@ struct ScreenshotImportView: View {
     @State private var isReading = false
     @State private var errorText: String?
     @State private var isTargeted = false
+    /// Kept so the screenshot can be re-read the other way when detection is wrong.
+    @State private var lastImage: CGImage?
+    @State private var lastOCRText = ""
 
     // Editable copies, so a misread can be corrected before saving.
     @State private var title = ""
@@ -204,6 +207,14 @@ struct ScreenshotImportView: View {
 
     private var footer: some View {
         HStack {
+            if draft != nil, !lastOCRText.isEmpty {
+                Button("This is a schedule", action: rereadAsSchedule)
+                    .help("Read this screenshot as a list of classes instead")
+            }
+            if schedule != nil, lastImage != nil {
+                Button("This is one assignment", action: rereadAsAssignment)
+                    .help("Read this screenshot as a single assignment instead")
+            }
             if draft != nil || schedule != nil {
                 Button("Start over") {
                     draft = nil
@@ -274,7 +285,7 @@ struct ScreenshotImportView: View {
         }
     }
 
-    private func read(_ image: NSImage) {
+    private func read(_ image: NSImage, forcing forcedKind: ScreenshotKind? = nil) {
         isReading = true
         errorText = nil
         guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
@@ -282,8 +293,9 @@ struct ScreenshotImportView: View {
             return
         }
 
+        lastImage = cgImage
         Task {
-            let result = await ScreenshotExtractor.extract(from: cgImage)
+            let result = await ScreenshotExtractor.extract(from: cgImage, forcing: forcedKind)
             await MainActor.run {
                 isReading = false
                 switch result {
@@ -299,6 +311,7 @@ struct ScreenshotImportView: View {
                         }
                         apply(outcome, draft: found)
                     }
+                    lastOCRText = outcome.ocrText
                 case .failure(let error):
                     errorText = error.localizedDescription
                 }
@@ -361,6 +374,35 @@ struct ScreenshotImportView: View {
         }
     }
 
+    /// Detection reads the text rather than the picture, and school software is
+    /// endlessly inventive, so the student gets the final say on what this is.
+    private func rereadAsSchedule() {
+        guard !lastOCRText.isEmpty else { return }
+        isReading = true
+        errorText = nil
+        Task {
+            let found = await ScreenshotExtractor.readAsSchedule(ocrText: lastOCRText)
+            await MainActor.run {
+                isReading = false
+                guard let found, !found.rows.isEmpty else {
+                    errorText = ModelScheduleReader.isAvailable
+                        ? "No classes could be picked out of that screenshot."
+                        : "Reading an unfamiliar schedule layout needs Apple Intelligence, which is turned off."
+                    return
+                }
+                draft = found.rows.isEmpty ? draft : nil
+                schedule = found
+            }
+        }
+    }
+
+    private func rereadAsAssignment() {
+        guard let image = lastImage else { return }
+        schedule = nil
+        let nsImage = NSImage(cgImage: image, size: .zero)
+        read(nsImage, forcing: .assignment)
+    }
+
     private var headerSubtitle: String {
         if schedule != nil { return "Found a schedule. Pick which classes to add." }
         if draft != nil { return engine?.explanation ?? "" }
@@ -416,10 +458,28 @@ struct ScreenshotImportView: View {
 
                         Spacer(minLength: 0)
 
-                        if let period = row.period {
-                            Chip(text: "P\(period)", tint: Theme.accent)
+                        // Editable, because an unfamiliar layout can put a room
+                        // number or a start time where the period belongs.
+                        HStack(spacing: 3) {
+                            Text("P").font(Theme.data(10)).foregroundStyle(.secondary)
+                            TextField("—", value: Binding(
+                                get: { schedule?.rows[index].period },
+                                set: { schedule?.rows[index].period = $0 }
+                            ), format: .number)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 38)
                         }
-                        Chip(text: row.semesterLabel)
+
+                        Picker("", selection: Binding(
+                            get: { schedule?.rows[index].semester ?? 0 },
+                            set: { schedule?.rows[index].semester = $0 }
+                        )) {
+                            Text("All year").tag(0)
+                            Text("Sem 1").tag(1)
+                            Text("Sem 2").tag(2)
+                        }
+                        .labelsHidden()
+                        .frame(width: 90)
                     }
                     .padding(.vertical, 1)
                 }
@@ -475,7 +535,7 @@ struct ScreenshotImportView: View {
                 room: row.room,
                 period: row.period,
                 colorHex: ClassPalette.hex(forIndex: existing.count + created),
-                daysMask: Weekdays.mask(from: Weekdays.schoolWeek),
+                daysMask: Weekdays.mask(from: row.weekdays ?? Weekdays.schoolWeek),
                 startMinutes: row.startMinutes,
                 endMinutes: row.endMinutes,
                 semester: row.semester,

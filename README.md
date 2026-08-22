@@ -73,9 +73,18 @@ review before anything is saved. Which kind of screenshot it is, is worked out
 from the text: several classes pinned to periods is a schedule, anything else is
 an assignment.
 
-A schedule import reads the course name, period, and semester for every row, and
-handles schools that run a different timetable each semester — Locker then shows
-whichever one is currently running.
+A schedule import reads the course name, period, term, teacher, room, times, and
+meeting days for every row, and handles schools that run a different timetable
+each semester — Locker then shows whichever one is currently running.
+
+Familiar layouts (a detail line per class, like "Period 3 - SEMESTER 1") are read
+by pattern alone, with no model involved. Anything else goes to the on-device
+model, which is told to find the rows and label the columns and nothing more.
+Every value still has to appear in the screenshot to survive, and a value that
+lands in the wrong column produces nothing rather than a plausible mistake — a
+start time of 7:45 will not become "period 7". Every row is editable before it is
+saved, and if the wrong reading is chosen there's a button to read the screenshot
+the other way.
 
 The pipeline is deliberately lopsided, because a planner full of wrong dates is
 worse than an empty one:

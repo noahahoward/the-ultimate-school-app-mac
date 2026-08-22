@@ -6,6 +6,11 @@ import FoundationModels
 #endif
 
 /// Which path produced a draft, so the review sheet can say so plainly.
+/// What a screenshot is being read as.
+enum ScreenshotKind: String, Sendable {
+    case assignment, schedule
+}
+
 enum ExtractionEngine: String, Sendable {
     case model = "on-device model"
     case labels = "label matching"
@@ -50,21 +55,47 @@ struct ExtractionOutcome: Sendable {
 /// screenshot, so an answer the model made up cannot reach the database.
 enum ScreenshotExtractor {
 
-    static func extract(from image: CGImage, now: Date = Date()) async -> Result<ExtractionOutcome, Error> {
+    /// `forcing` overrides what the screenshot looks like, for when detection
+    /// gets it wrong and the student says which it is.
+    static func extract(
+        from image: CGImage,
+        forcing kind: ScreenshotKind? = nil,
+        now: Date = Date()
+    ) async -> Result<ExtractionOutcome, Error> {
         do {
             let ocr = try ScreenshotOCR.read(image)
+            if kind == .assignment { return .success(try await assignmentOutcome(ocr: ocr, now: now)) }
 
-            // A timetable is recognisable without any model: several classes each
-            // pinned to a period. Two or more rows is a schedule, not an assignment.
-            let scheduleRows = ScheduleParsing.rows(from: ocr)
-            if scheduleRows.count >= 2 {
+            // Familiar layouts print one detail line per class ("Period 3 -
+            // SEMESTER 1"), which needs no model at all.
+            let patternRows = ScheduleParsing.rows(from: ocr)
+            if patternRows.count >= 2 {
                 return .success(ExtractionOutcome(
-                    content: .schedule(ScheduleDraft(rows: scheduleRows)),
+                    content: .schedule(ScheduleDraft(rows: patternRows)),
                     engine: .labels,
                     ocrText: ocr.text
                 ))
             }
 
+            // Every school prints its timetable differently, so an unfamiliar
+            // layout goes to the model rather than being forced through the
+            // assignment reader, which would make nonsense of it.
+            if let modelRows = await ModelScheduleReader.read(ocrText: ocr.text) {
+                return .success(ExtractionOutcome(
+                    content: .schedule(ScheduleDraft(rows: modelRows)),
+                    engine: .model,
+                    ocrText: ocr.text
+                ))
+            }
+
+            return .success(try await assignmentOutcome(ocr: ocr, now: now))
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    private static func assignmentOutcome(ocr: OCRResult, now: Date) async throws -> ExtractionOutcome {
+        do {
             var engine = ExtractionEngine.labels
             var fields = HeuristicExtractor.extract(from: ocr)
 
@@ -75,12 +106,17 @@ enum ScreenshotExtractor {
 
             let checked = EvidenceCheck.verify(fields, against: ocr.text)
             let draft = FieldParsing.draft(from: checked.fields, rejected: checked.rejected, now: now)
-            return .success(ExtractionOutcome(
-                content: .assignment(draft), engine: engine, ocrText: ocr.text
-            ))
-        } catch {
-            return .failure(error)
+            return ExtractionOutcome(content: .assignment(draft), engine: engine, ocrText: ocr.text)
         }
+    }
+
+    /// Re-reads an already-recognised screenshot as a schedule, for when the
+    /// assignment reader was pointed at a timetable it didn't recognise.
+    static func readAsSchedule(ocrText: String) async -> ScheduleDraft? {
+        if let rows = await ModelScheduleReader.read(ocrText: ocrText), rows.count >= 1 {
+            return ScheduleDraft(rows: rows)
+        }
+        return nil
     }
 
     /// The model leads, but anything it left blank falls back to label matching
