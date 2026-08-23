@@ -133,3 +133,53 @@ final class CardReaderTests: XCTestCase {
         XCTAssertTrue(CardReader.classes(from: ocr).isEmpty)
     }
 }
+
+extension CardReaderTests {
+
+    func testATruncatedCardNameIsFilledInFromTheSidebar() {
+        // The card says "2026 Summer Homew...", the sidebar "2026 Summer
+        // Homework: Hon...". Neither is complete, but one is fuller.
+        var lines = classroomDashboard.lines
+        lines.append(line("2026 Summer Homework: Hon...", x: 0.039, y: 0.400))
+        lines.append(line("Summer Homework AP Human...", x: 0.041, y: 0.359))
+
+        let found = CardReader.classes(from: OCRResult(lines: lines))
+        let names = found.map(\.name)
+        XCTAssertTrue(names.contains("2026 Summer Homework: Hon..."), "got: \(names)")
+        XCTAssertTrue(names.contains("Summer Homework AP Human..."), "got: \(names)")
+        XCTAssertFalse(names.contains("2026 Summer Homew..."))
+    }
+
+    func testAShortNameIsNotExtendedIntoADifferentClass() {
+        // "Biology" and "Biology II" are two classes, not one truncated twice.
+        XCTAssertFalse(CardReader.canComplete("Biology", with: "Biology II"))
+        XCTAssertTrue(CardReader.canComplete("Summer Homework A", with: "Summer Homework AP Human..."))
+        XCTAssertTrue(CardReader.canComplete("2026 Summer Homew...", with: "2026 Summer Homework: Hon..."))
+    }
+
+    func testACompleteNameIsNotReplaced() {
+        // "BIOLOGY I-3-S1" is whole, so nothing should overwrite it even though
+        // longer lines exist on the page.
+        XCTAssertTrue(found.contains { $0.name == "BIOLOGY I-3-S1" })
+    }
+
+    func testTruncationIsRecognised() {
+        XCTAssertTrue(CardReader.isTruncated("2026 Summer Homew..."))
+        XCTAssertTrue(CardReader.isTruncated("Summer Homework\u{2026}"))
+        XCTAssertFalse(CardReader.isTruncated("BIOLOGY I-3-S1"))
+    }
+
+    func testAnUnrelatedLongerNameIsNotUsed() {
+        // Completion has to match the opening, or a truncated name would pick up
+        // whatever else is longest on the page.
+        let lines = [
+            line("ALG 2 For Pre...", x: 0.24, y: 0.5),
+            line("Kate Barry", x: 0.24, y: 0.48),
+            line("CHOIR", x: 0.6, y: 0.5),
+            line("Ada Reyes", x: 0.6, y: 0.48),
+            line("BIOLOGY I-3-S1 Honors Section", x: 0.6, y: 0.9),
+        ]
+        let found = CardReader.classes(from: OCRResult(lines: lines))
+        XCTAssertEqual(found.first?.name, "ALG 2 For Pre...", "an unrelated line must not be adopted")
+    }
+}

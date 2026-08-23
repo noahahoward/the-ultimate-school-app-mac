@@ -20,7 +20,7 @@ enum CardReader {
         guard usable.count >= 4 else { return [] }
 
         let drafts = clusters(of: usable).compactMap(draft(from:))
-        return merge(drafts)
+        return completeNames(merge(drafts), from: ocr.lines)
     }
 
     // MARK: - Clustering
@@ -172,6 +172,44 @@ enum CardReader {
             }
         }
         return kept.sorted { ($0.period ?? 99) < ($1.period ?? 99) }
+    }
+
+    /// Fills in names the page cut short.
+    ///
+    /// Classroom truncates a long class name in both the sidebar and the card,
+    /// but at different points — "2026 Summer Homew…" on the card against
+    /// "2026 Summer Homework: Hon…" in the sidebar. The fuller text is usually
+    /// somewhere on screen even when it belongs to a block that wasn't itself a
+    /// class, so it's worth looking for.
+    static func completeNames(_ drafts: [ClassDraft], from lines: [OCRLine]) -> [ClassDraft] {
+        let candidates = lines.map(\.text).filter { isCourseName($0) }
+
+        return drafts.map { draft in
+            let fuller = candidates
+                .filter { $0.count > draft.name.count && canComplete(draft.name, with: $0) }
+                .max { $0.count < $1.count }
+
+            guard let fuller else { return draft }
+            var updated = draft
+            updated.name = fuller
+            return updated
+        }
+    }
+
+    static func isTruncated(_ name: String) -> Bool {
+        name.hasSuffix("...") || name.hasSuffix("…")
+    }
+
+    /// Whether a longer line is the same name, spelled out further.
+    ///
+    /// An ellipsis says so outright. Failing that the longer line must literally
+    /// begin with the shorter one, and the shorter one must be long enough to be
+    /// distinctive — otherwise "Biology" would be "completed" into "Biology II",
+    /// which is a different class.
+    static func canComplete(_ name: String, with candidate: String) -> Bool {
+        guard sharesOpening(candidate, name) else { return false }
+        if isTruncated(name) { return true }
+        return candidate.hasPrefix(name) && name.count >= 12
     }
 
     static func sameClass(_ lhs: ClassDraft, _ rhs: ClassDraft) -> Bool {
