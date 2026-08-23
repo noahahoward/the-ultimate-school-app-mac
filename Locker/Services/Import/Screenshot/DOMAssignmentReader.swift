@@ -14,6 +14,8 @@ struct AssignmentDraft: Identifiable, Equatable, Sendable {
     var courseID = ""
     /// The class it belongs to here, once matched or chosen.
     var classID = ""
+    /// Something to keep rather than something to hand in.
+    var isResource = false
     var url = ""
     var sourceLine = ""
     var include = true

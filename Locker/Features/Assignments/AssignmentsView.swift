@@ -16,7 +16,7 @@ struct AssignmentsView: View {
     }
 
     @EnvironmentObject private var app: AppState
-    @Query private var assignments: [Assignment]
+    @Query(filter: #Predicate<Assignment> { !$0.isResource }) private var assignments: [Assignment]
     @Query(sort: \SchoolClass.sortIndex) private var classes: [SchoolClass]
 
     @State private var layout: Layout = .list

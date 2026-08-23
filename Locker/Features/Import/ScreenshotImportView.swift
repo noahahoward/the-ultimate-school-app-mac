@@ -994,6 +994,21 @@ struct ScreenshotImportView: View {
                         Spacer(minLength: 0)
 
                         Picker("", selection: Binding(
+                            get: { assignments[index].isResource },
+                            set: { isResource in
+                                assignments[index].isResource = isResource
+                                if isResource { assignments[index].dueAt = nil }
+                            }
+                        )) {
+                            Text("Work").tag(false)
+                            Text("Resource").tag(true)
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .font(.system(size: 10))
+                        .frame(width: 100)
+
+                        Picker("", selection: Binding(
                             get: { assignments[index].classID },
                             set: { assignments[index].classID = $0 }
                         )) {
@@ -1007,7 +1022,9 @@ struct ScreenshotImportView: View {
                         .font(.system(size: 10))
                         .frame(width: 150)
 
-                        if let due = item.dueAt {
+                        if item.isResource {
+                            Text("keep").font(Theme.data(10)).foregroundStyle(.tertiary)
+                        } else if let due = item.dueAt {
                             Text(DueFormat.text(for: due, hasTime: item.hasDueTime))
                                 .font(Theme.data(10))
                                 .foregroundStyle(DueFormat.urgency(for: due).color)
@@ -1069,10 +1086,11 @@ struct ScreenshotImportView: View {
             let assignment = Assignment(
                 title: item.title,
                 schoolClass: matchedClass,
-                dueAt: item.dueAt,
-                hasDueTime: item.hasDueTime,
+                dueAt: item.isResource ? nil : item.dueAt,
+                hasDueTime: item.isResource ? false : item.hasDueTime,
                 type: item.type
             )
+            assignment.isResource = item.isResource
             if !item.url.isEmpty {
                 assignment.externalRefs = [ExternalRef(
                     source: .googleClassroom, externalID: item.externalID, url: item.url

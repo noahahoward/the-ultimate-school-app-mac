@@ -3,7 +3,7 @@ import SwiftData
 
 struct TodayView: View {
     @EnvironmentObject private var app: AppState
-    @Query private var assignments: [Assignment]
+    @Query(filter: #Predicate<Assignment> { !$0.isResource }) private var assignments: [Assignment]
     @Query private var classes: [SchoolClass]
     @Query private var decks: [Deck]
 

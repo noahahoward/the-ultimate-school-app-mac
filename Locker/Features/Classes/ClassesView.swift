@@ -4,6 +4,8 @@ import SwiftData
 struct ClassesView: View {
     @EnvironmentObject private var app: AppState
     @Query(sort: \SchoolClass.sortIndex) private var classes: [SchoolClass]
+    @State private var expandedResources: Set<String> = []
+    @State private var editingAssignment: Assignment?
     @State private var editing: SchoolClass?
     @State private var showArchived = false
     @State private var pendingDeletion: SchoolClass?
@@ -48,6 +50,7 @@ struct ClassesView: View {
             }
         }
         .sheet(item: $editing) { ClassEditor(schoolClass: $0).environmentObject(app) }
+        .sheet(item: $editingAssignment) { AssignmentEditor(assignment: $0).environmentObject(app) }
         .confirmationDialog(
             "Delete \(pendingDeletion?.name ?? "this class")?",
             isPresented: Binding(get: { pendingDeletion != nil }, set: { if !$0 { pendingDeletion = nil } }),
@@ -195,9 +198,15 @@ struct ClassesView: View {
     }
 
     private func classCard(_ schoolClass: SchoolClass) -> some View {
-        let openCount = schoolClass.assignments.filter { !$0.isDone }.count
+        let openCount = schoolClass.assignments.filter { !$0.isDone && !$0.isResource }.count
+        let resources = schoolClass.assignments
+            .filter(\.isResource)
+            .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
 
+        // One stack, not two loose views: Panel styles whatever it is handed,
+        // and a pair of them would each come out as a card of its own.
         return Panel {
+            VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: 12) {
                 RoundedRectangle(cornerRadius: 3)
                     .fill(Theme.classColor(schoolClass.colorHex))
@@ -244,6 +253,9 @@ struct ClassesView: View {
             }
             .contentShape(Rectangle())
             .onTapGesture { editing = schoolClass }
+
+            if !resources.isEmpty { resourceShelf(resources, for: schoolClass) }
+            }
         }
         .draggable(schoolClass.idString)
         .contextMenu {
@@ -263,6 +275,53 @@ struct ClassesView: View {
             }
             Divider()
             Button("Delete", role: .destructive) { pendingDeletion = schoolClass }
+        }
+    }
+
+    /// The things a class hands out to be kept rather than done.
+    @ViewBuilder
+    private func resourceShelf(_ resources: [Assignment], for schoolClass: SchoolClass) -> some View {
+        let open = expandedResources.contains(schoolClass.idString)
+
+        Divider().padding(.vertical, 6)
+
+        Button {
+            if open { expandedResources.remove(schoolClass.idString) }
+            else { expandedResources.insert(schoolClass.idString) }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: open ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                Text("\(resources.count) resource\(resources.count == 1 ? "" : "s")")
+                    .font(.system(size: 11, weight: .medium))
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(.secondary)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+
+        if open {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(resources) { resource in
+                    HStack(spacing: 6) {
+                        Image(systemName: resource.type.symbol)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                        Text(resource.title)
+                            .font(.system(size: 11))
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        if let link = resource.externalRefs.first?.url, let url = URL(string: link) {
+                            Link("Open", destination: url).font(.system(size: 10))
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture { editingAssignment = resource }
+                }
+            }
+            .padding(.top, 4)
+            .padding(.leading, 14)
         }
     }
 

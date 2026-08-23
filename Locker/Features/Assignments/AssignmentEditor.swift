@@ -34,6 +34,23 @@ struct AssignmentEditor: View {
                         }
                     }
 
+                    Picker("Kind", selection: Binding(
+                        get: { assignment.isResource },
+                        set: { isResource in
+                            assignment.isResource = isResource
+                            // Nothing to hand in, so nothing to be late for.
+                            if isResource {
+                                hasDueDate = false
+                                assignment.dueAt = nil
+                                repeatCount = 0
+                            }
+                        }
+                    )) {
+                        Text("Work to do").tag(false)
+                        Text("Resource").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+
                     Picker("Type", selection: typeBinding) {
                         ForEach(AssignmentType.allCases, id: \.self) { type in
                             Label(type.label, systemImage: type.symbol).tag(type)
@@ -48,45 +65,49 @@ struct AssignmentEditor: View {
                     .pickerStyle(.segmented)
                 }
 
-                Section("Due") {
-                    Toggle("Has a due date", isOn: $hasDueDate)
-                    if hasDueDate {
-                        DatePicker(
-                            "Due",
-                            selection: $dueDate,
-                            displayedComponents: includeTime ? [.date, .hourAndMinute] : [.date]
-                        )
-                        Toggle("Due at a specific time", isOn: $includeTime)
+                // A resource is never due, never repeats, never scored — so
+                // none of that is asked about.
+                if !assignment.isResource {
+                    Section("Due") {
+                        Toggle("Has a due date", isOn: $hasDueDate)
+                        if hasDueDate {
+                            DatePicker(
+                                "Due",
+                                selection: $dueDate,
+                                displayedComponents: includeTime ? [.date, .hourAndMinute] : [.date]
+                            )
+                            Toggle("Due at a specific time", isOn: $includeTime)
+                        }
                     }
-                }
 
-                Section("Repeat") {
-                    Stepper(repeatCount == 0
-                            ? "Doesn't repeat"
-                            : "Also add \(repeatCount) more, a week apart",
-                            value: $repeatCount, in: 0...Recurrence.maximumRepeats)
-                        .disabled(!hasDueDate)
-                    if !hasDueDate {
-                        Text("Give it a due date to repeat it.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+                    Section("Repeat") {
+                        Stepper(repeatCount == 0
+                                ? "Doesn't repeat"
+                                : "Also add \(repeatCount) more, a week apart",
+                                value: $repeatCount, in: 0...Recurrence.maximumRepeats)
+                            .disabled(!hasDueDate)
+                        if !hasDueDate {
+                            Text("Give it a due date to repeat it.")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                }
 
-                Section("Planning") {
-                    TextField("Estimated minutes", value: $assignment.estimatedMinutes, format: .number)
-                    Toggle("Mute reminders for this", isOn: $assignment.remindersSuppressed)
-                }
-
-                Section("Grade") {
-                    HStack {
-                        TextField("Score", value: $assignment.score, format: .number)
-                        Text("/")
-                            .foregroundStyle(.secondary)
-                        TextField("Out of", value: $assignment.maxScore, format: .number)
+                    Section("Planning") {
+                        TextField("Estimated minutes", value: $assignment.estimatedMinutes, format: .number)
+                        Toggle("Mute reminders for this", isOn: $assignment.remindersSuppressed)
                     }
-                    if let percent = assignment.percentScore {
-                        LabeledContent("Percent", value: DueFormat.percentText(percent))
+
+                    Section("Grade") {
+                        HStack {
+                            TextField("Score", value: $assignment.score, format: .number)
+                            Text("/")
+                                .foregroundStyle(.secondary)
+                            TextField("Out of", value: $assignment.maxScore, format: .number)
+                        }
+                        if let percent = assignment.percentScore {
+                            LabeledContent("Percent", value: DueFormat.percentText(percent))
+                        }
                     }
                 }
 

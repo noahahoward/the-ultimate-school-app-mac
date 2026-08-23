@@ -4,7 +4,7 @@ import SwiftData
 /// The menu bar extra: the next thing happening, and what's due today.
 struct MenuBarContent: View {
     @EnvironmentObject private var app: AppState
-    @Query private var assignments: [Assignment]
+    @Query(filter: #Predicate<Assignment> { !$0.isResource }) private var assignments: [Assignment]
     @Query private var classes: [SchoolClass]
 
     @Environment(\.openWindow) private var openWindow
@@ -112,7 +112,7 @@ struct MenuBarContent: View {
 /// The compact label shown in the menu bar itself.
 struct MenuBarLabel: View {
     @EnvironmentObject private var app: AppState
-    @Query private var assignments: [Assignment]
+    @Query(filter: #Predicate<Assignment> { !$0.isResource }) private var assignments: [Assignment]
 
     private var openToday: Int {
         let today = Calendar.current.startOfDay(for: Date())

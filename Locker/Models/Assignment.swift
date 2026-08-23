@@ -18,6 +18,11 @@ final class Assignment {
     var isDone: Bool = false
     var completedAt: Date?
 
+    /// Something to consult rather than something to hand in — a practice site,
+    /// a syllabus, a reading list. It is never due, never late, and never
+    /// counted among the work outstanding.
+    var isResource: Bool = false
+
     // Grading
     var score: Double?
     var maxScore: Double?

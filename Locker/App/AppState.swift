@@ -170,7 +170,8 @@ final class AppState: ObservableObject {
         var requests: [NotificationService.Request] = []
 
         for assignment in allAssignments() {
-            guard !assignment.isDone, let subject = assignment.reminderSubject else { continue }
+            guard !assignment.isDone, !assignment.isResource,
+                  let subject = assignment.reminderSubject else { continue }
             let plans = ReminderScheduler.plans(for: subject, config: config)
             for plan in plans {
                 requests.append(NotificationService.Request(

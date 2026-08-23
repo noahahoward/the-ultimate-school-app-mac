@@ -4,7 +4,7 @@ import SwiftData
 struct FocusView: View {
     @EnvironmentObject private var app: AppState
     @EnvironmentObject private var timer: FocusTimer
-    @Query private var assignments: [Assignment]
+    @Query(filter: #Predicate<Assignment> { !$0.isResource }) private var assignments: [Assignment]
     @Query private var sessions: [FocusSession]
 
     private var openAssignments: [Assignment] {
