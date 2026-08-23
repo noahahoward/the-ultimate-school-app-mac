@@ -617,21 +617,40 @@ struct ScreenshotImportView: View {
         self.schedule = updated
     }
 
+    /// Ties a course at the source to the class it turned out to be.
+    ///
+    /// School timetables and course pages name the same class differently, and
+    /// reading one name into the other only has to work once: from then on the
+    /// course is recognised outright, whatever it is called.
+    private func remember(course: String, as schoolClass: SchoolClass) {
+        let already = schoolClass.externalRefs.contains {
+            $0.source == .googleClassroom && $0.externalID == course
+        }
+        guard !already else { return }
+        schoolClass.externalRefs.append(
+            ExternalRef(source: .googleClassroom, externalID: course)
+        )
+    }
+
     /// Finds the class a course name refers to, or nothing if it is unclear.
     ///
     /// The day the work is due decides which half of the year to read it in,
     /// since a timetable holds each course once per semester and work read
     /// today can belong to either.
-    private func classMatching(name: String, due: Date?) -> SchoolClass? {
+    private func classMatching(name: String, due: Date?, courseID: String = "") -> SchoolClass? {
         let active = classes.filter { !$0.isArchived }
-        let candidates = active.map {
-            ClassMatcher.Candidate(id: $0.idString, name: $0.name, teacher: $0.teacher,
-                                   aliases: $0.aliases, semester: $0.semester)
+        let candidates = active.map { klass in
+            ClassMatcher.Candidate(
+                id: klass.idString, name: klass.name, teacher: klass.teacher,
+                aliases: klass.aliases, semester: klass.semester,
+                externalIDs: klass.externalRefs
+                    .filter { $0.source == .googleClassroom }.map(\.externalID)
+            )
         }
         let semester = ScheduleEngine.semester(on: due ?? Date(),
                                                config: app.settings.scheduleConfig)
         guard let id = ClassMatcher.match(className: name, teacher: "", in: candidates,
-                                          semesterInForce: semester).id
+                                          semesterInForce: semester, courseID: courseID).id
         else { return nil }
         return active.first { $0.idString == id }
     }
@@ -929,7 +948,9 @@ struct ScreenshotImportView: View {
         var found: [UUID: DuplicateDetector.Match] = [:]
         for index in assignments.indices {
             let item = assignments[index]
-            let matchedClass = classes.first { SyncMerger.namesMatch($0.name, item.className) }
+            let matchedClass = classMatching(name: item.className, due: item.dueAt,
+                                             courseID: item.courseID)
+            assignments[index].classID = matchedClass?.idString ?? ""
             guard let match = DuplicateDetector.assignment(
                 title: item.title, classID: matchedClass?.idString, dueAt: item.dueAt, among: candidates
             ) else { continue }
@@ -971,6 +992,20 @@ struct ScreenshotImportView: View {
                         }
 
                         Spacer(minLength: 0)
+
+                        Picker("", selection: Binding(
+                            get: { assignments[index].classID },
+                            set: { assignments[index].classID = $0 }
+                        )) {
+                            Text("No class").tag("")
+                            ForEach(classes.filter { !$0.isArchived }, id: \.idString) { klass in
+                                Text(klass.name).tag(klass.idString)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .font(.system(size: 10))
+                        .frame(width: 150)
 
                         if let due = item.dueAt {
                             Text(DueFormat.text(for: due, hasTime: item.hasDueTime))
@@ -1025,8 +1060,12 @@ struct ScreenshotImportView: View {
     }
 
     private func saveAssignments() {
+        let active = classes.filter { !$0.isArchived }
         for item in assignments where item.include {
-            let matchedClass = classMatching(name: item.className, due: item.dueAt)
+            let matchedClass = active.first { $0.idString == item.classID }
+            if let matchedClass, !item.courseID.isEmpty {
+                remember(course: item.courseID, as: matchedClass)
+            }
             let assignment = Assignment(
                 title: item.title,
                 schoolClass: matchedClass,

@@ -145,4 +145,50 @@ final class ClassMatcherTests: XCTestCase {
     func testNumbersAgreeingIsNotASubject() {
         XCTAssertFalse(ClassMatcher.sameSubject(["9", "2"], ["9", "2", "spanish"]))
     }
+
+    // MARK: - Remembering a course
+
+    func testAKnownCourseIsRecognisedWhateverItIsCalledNow() {
+        let candidates: [ClassMatcher.Candidate] = [
+            .init(id: "eng1", name: "HONORS ENGLISH 9 I", semester: 1, externalIDs: ["7788"]),
+            .init(id: "bio1", name: "BIOLOGY I", semester: 1),
+        ]
+        // Nothing in the name points anywhere; the link does.
+        let match = ClassMatcher.match(className: "Mr Whitlock's Reading Corner",
+                                       teacher: "", in: candidates,
+                                       semesterInForce: 1, courseID: "7788")
+        XCTAssertEqual(match, .matched(id: "eng1", reason: .link))
+    }
+
+    func testAKnownCourseBeatsANameThatPointsElsewhere() {
+        let candidates: [ClassMatcher.Candidate] = [
+            .init(id: "eng1", name: "HONORS ENGLISH 9 I", semester: 1, externalIDs: ["7788"]),
+            .init(id: "bio1", name: "BIOLOGY I", semester: 1),
+        ]
+        let match = ClassMatcher.match(className: "BIOLOGY I", teacher: "", in: candidates,
+                                       semesterInForce: 1, courseID: "7788")
+        XCTAssertEqual(match, .matched(id: "eng1", reason: .link))
+    }
+
+    func testAnUnknownCourseStillFallsBackToTheName() {
+        let candidates: [ClassMatcher.Candidate] = [
+            .init(id: "eng1", name: "HONORS ENGLISH 9 I", semester: 1, externalIDs: ["7788"]),
+            .init(id: "bio1", name: "BIOLOGY I", semester: 1),
+        ]
+        let match = ClassMatcher.match(className: "2026 Summer Homework: Honors ELA 9",
+                                       teacher: "", in: candidates,
+                                       semesterInForce: 1, courseID: "9999")
+        XCTAssertEqual(match, .matched(id: "eng1", reason: .subject))
+    }
+
+    func testASingleSubjectWordIsNotEnoughToFileWorkBy() {
+        // "Bio" alone could be either half of Biology, or a course not listed
+        // here at all. The student picks, and the choice is then remembered.
+        let candidates: [ClassMatcher.Candidate] = [
+            .init(id: "bio1", name: "BIOLOGY I", semester: 1),
+            .init(id: "bio2", name: "BIOLOGY II", semester: 2),
+        ]
+        XCTAssertEqual(ClassMatcher.match(className: "Summer Bio 2026", teacher: "",
+                                          in: candidates, semesterInForce: 1), .none)
+    }
 }

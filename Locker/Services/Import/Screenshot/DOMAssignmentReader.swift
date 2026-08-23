@@ -10,6 +10,10 @@ struct AssignmentDraft: Identifiable, Equatable, Sendable {
     var type: AssignmentType = .homework
     /// The address it came from, which identifies it across readings.
     var externalID = ""
+    /// The course the work was posted in, at the source.
+    var courseID = ""
+    /// The class it belongs to here, once matched or chosen.
+    var classID = ""
     var url = ""
     var sourceLine = ""
     var include = true
@@ -43,6 +47,7 @@ enum DOMAssignmentReader {
             guard let ids = assignmentID(in: link.href) else { continue }
             guard var draft = draft(from: link, now: now, calendar: calendar) else { continue }
             draft.externalID = ids.assignment
+            draft.courseID = ids.course
             draft.url = link.href
 
             // The same item is linked more than once; keep whichever reading

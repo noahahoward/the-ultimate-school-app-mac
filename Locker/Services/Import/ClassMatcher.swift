@@ -15,14 +15,17 @@ enum ClassMatcher {
         var aliases: [String]
         /// 0 = all year, 1 = first semester, 2 = second.
         var semester: Int
+        /// Courses at the source already known to be this class.
+        var externalIDs: [String]
 
         init(id: String, name: String, teacher: String = "",
-             aliases: [String] = [], semester: Int = 0) {
+             aliases: [String] = [], semester: Int = 0, externalIDs: [String] = []) {
             self.id = id
             self.name = name
             self.teacher = teacher
             self.aliases = aliases
             self.semester = semester
+            self.externalIDs = externalIDs
         }
     }
 
@@ -40,6 +43,7 @@ enum ClassMatcher {
 
     enum Reason: String, Sendable {
         case className = "matched the class name"
+        case link = "is the class you filed this course under before"
         case alias = "matched a nickname"
         case subject = "is the same subject"
         case teacher = "matched the teacher"
@@ -47,8 +51,16 @@ enum ClassMatcher {
 
     /// - Parameter semesterInForce: which semester the school is currently in,
     ///   used only to separate classes that are otherwise identical.
+    /// - Parameter courseID: the course at the source, when the page names one.
     static func match(className: String, teacher: String, in candidates: [Candidate],
-                      semesterInForce: Int? = nil) -> Match {
+                      semesterInForce: Int? = nil, courseID: String = "") -> Match {
+        // A course settled once is never read again. Teachers name their pages
+        // as they please and rename them mid-year; the link does not care.
+        if !courseID.isEmpty {
+            let linked = candidates.filter { $0.externalIDs.contains(courseID) }
+            if linked.count == 1 { return .matched(id: linked[0].id, reason: .link) }
+        }
+
         // A named course always beats an inferred one.
         if !className.trimmingCharacters(in: .whitespaces).isEmpty {
             let byName = candidates.filter { SyncMerger.namesMatch($0.name, className) }
