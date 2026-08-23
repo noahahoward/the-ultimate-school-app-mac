@@ -209,7 +209,7 @@ struct ClassesView: View {
                             .font(Theme.display(15, weight: .semibold))
                         if schoolClass.isArchived { Chip(text: "Archived") }
                         if schoolClass.isLinked {
-                            Chip(text: "Classroom", symbol: "arrow.triangle.2.circlepath", tint: Theme.accent)
+                            Chip(text: "Classroom", symbol: "link", tint: Theme.accent)
                         }
                     }
 

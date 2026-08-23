@@ -94,9 +94,13 @@ struct ClassEditor: View {
 
                 if schoolClass.isLinked {
                     Section("Google Classroom") {
-                        Text("Linked. New assignments arrive automatically; your edits here stay put.")
+                        Text("Work you read from this class's Classroom page is filed here, whatever the page is called.")
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
+                        Button("Forget this link") {
+                            schoolClass.externalRefs.removeAll { $0.source == .googleClassroom }
+                        }
+                        .font(.system(size: 11))
                     }
                 }
             }
