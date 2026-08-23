@@ -51,18 +51,27 @@ struct ContentView: View {
                         }
                     }
                     ToolbarItem(placement: .primaryAction) {
-                        Button { app.activeSheet = .screenshotImport } label: {
-                            Label("Add from screenshot", systemImage: "photo.on.rectangle.angled")
+                        // Pressing it reads a screenshot, which is how most work
+                        // gets in. The rest of the ways are a chevron away.
+                        Menu {
+                            Button("From a screenshot…") { app.activeSheet = .screenshotImport }
+                                .keyboardShortcut("i", modifiers: [.command, .shift])
+                            if BrowserTabs.anyBrowserRunning {
+                                Button("Read a browser page…") {
+                                    app.importEntry = .browserPage
+                                    app.activeSheet = .screenshotImport
+                                }
+                                .keyboardShortcut("r", modifiers: [.command, .option])
+                            }
+                            Divider()
+                            Button("Type it in…") { app.presentQuickAdd() }
+                                .keyboardShortcut("n", modifiers: .command)
+                        } label: {
+                            Label("Add", systemImage: "plus")
+                        } primaryAction: {
+                            app.activeSheet = .screenshotImport
                         }
-                        .keyboardShortcut("i", modifiers: [.command, .shift])
-                        .help("Add from a screenshot (⇧⌘I)")
-                    }
-                    ToolbarItem(placement: .primaryAction) {
-                        Button { app.presentQuickAdd() } label: {
-                            Label("Add work", systemImage: "plus")
-                        }
-                        .keyboardShortcut("n", modifiers: .command)
-                        .help("Add work (⌘N)")
+                        .help("Add work — press to read a screenshot, or pick another way")
                     }
                 }
         }

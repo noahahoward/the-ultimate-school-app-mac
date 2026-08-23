@@ -7,7 +7,9 @@ struct Panel<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        content
+        // Stacked, not passed through: a modifier applied to two loose views
+        // lands on each of them, and the panel comes out twice.
+        VStack(alignment: .leading, spacing: 0) { content }
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(

@@ -203,10 +203,7 @@ struct ClassesView: View {
             .filter(\.isResource)
             .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
 
-        // One stack, not two loose views: Panel styles whatever it is handed,
-        // and a pair of them would each come out as a card of its own.
         return Panel {
-            VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: 12) {
                 RoundedRectangle(cornerRadius: 3)
                     .fill(Theme.classColor(schoolClass.colorHex))
@@ -255,7 +252,6 @@ struct ClassesView: View {
             .onTapGesture { editing = schoolClass }
 
             if !resources.isEmpty { resourceShelf(resources, for: schoolClass) }
-            }
         }
         .draggable(schoolClass.idString)
         .contextMenu {
