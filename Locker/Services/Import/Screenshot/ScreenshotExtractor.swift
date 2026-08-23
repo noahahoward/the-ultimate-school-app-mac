@@ -91,9 +91,12 @@ enum ScreenshotExtractor {
             // fuller answer wins — a page of cards still contains the odd
             // "Per 4" line, and letting that decide would find two classes out
             // of six.
-            let patternRows = ScheduleParsing.rows(from: ocr)
-            let cardRows = CardReader.classes(from: ocr)
-            let deterministic = cardRows.count > patternRows.count ? cardRows : patternRows
+            let candidates = [
+                ScheduleParsing.rows(from: ocr),
+                CardReader.classes(from: ocr),
+                ScheduleTextReader.classes(from: ocr),
+            ]
+            let deterministic = candidates.max { $0.count < $1.count } ?? []
 
             if deterministic.count >= 2 {
                 return .success(ExtractionOutcome(

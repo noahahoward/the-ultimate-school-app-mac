@@ -194,11 +194,18 @@ struct WindowChooserView: View {
 
         do {
             let page = try await BrowserDOM.read(window, tab: selectedTab)
-            let classes = DOMClassReader.classes(from: page)
+
+            // Course links first, which give a name that cannot be clipped. Where
+            // a portal has no such links — most do not — the page's own text is
+            // still far better than a picture of it.
+            var classes = DOMClassReader.classes(from: page)
+            if classes.isEmpty {
+                classes = ScheduleTextReader.classes(from: DOMClassReader.fallbackLines(from: page))
+            }
             isReadingPage = false
 
             guard !classes.isEmpty else {
-                errorText = "No classes were found on that page. Try Capture instead, or open the page listing the classes."
+                errorText = "No classes were found on that page. Try Capture instead, or open the page that lists the classes."
                 return
             }
             onClasses(classes)
