@@ -52,6 +52,9 @@ final class AppSettings {
     var classroomLastSyncSummary: String = ""
     var classroomConnectedEmail: String = ""
 
+    /// Pages worth checking again — a to-do list, a schedule.
+    var savedPages: [SavedPage] = []
+
     /// Column labellings the student has corrected, reused for the same layout.
     var savedColumnLayouts: [SavedColumnLayout] = []
 

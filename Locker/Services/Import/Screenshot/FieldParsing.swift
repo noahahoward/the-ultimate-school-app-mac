@@ -92,6 +92,44 @@ enum FieldParsing {
         return calendar.startOfDay(for: date)
     }
 
+    /// "Wed, Aug 26, 11:59 PM" and the like: a weekday that adds nothing, a
+    /// date, and a time that matters.
+    ///
+    /// Returns whether a real time was given, because "due at 11:59 PM" and
+    /// "due that day" deserve different reminders.
+    static func dateAndTime(
+        from raw: String,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> (date: Date, hasTime: Bool)? {
+        let cleaned = raw
+            .replacingOccurrences(of: "\u{202F}", with: " ")   // narrow no-break space
+            .replacingOccurrences(of: "\u{00A0}", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else { return nil }
+
+        let parts = cleaned.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        var dayPart = cleaned
+        var timePart: String?
+
+        if parts.count >= 2 {
+            // A leading weekday is decoration; the date is the first part that
+            // names a month or looks numeric.
+            let withoutWeekday = parts.filter { Weekday.parse($0.lowercased()) == nil }
+            dayPart = withoutWeekday.first ?? parts[0]
+            timePart = withoutWeekday.dropFirst().first { $0.contains(":") }
+        } else if let range = cleaned.range(of: #"\d{1,2}:\d{2}"#, options: .regularExpression) {
+            timePart = String(cleaned[range.lowerBound...])
+            dayPart = String(cleaned[..<range.lowerBound])
+        }
+
+        guard let day = date(from: dayPart, now: now, calendar: calendar) else { return nil }
+        guard let timePart, let minutes = ScheduleParsing.clockTimes(in: timePart).first else {
+            return (day, false)
+        }
+        return (ScheduleEngine.date(day, atMinutes: minutes, calendar: calendar), true)
+    }
+
     /// "4 points" -> 4. "100 pts" -> 100. "Ungraded" -> nil.
     static func points(from raw: String) -> Double? {
         let digits = raw.unicodeScalars

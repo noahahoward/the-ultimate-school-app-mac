@@ -7,6 +7,8 @@ struct WindowChooserView: View {
     /// Classes read straight from a browser page, which keeps names the screen
     /// would have clipped.
     var onClasses: ([ClassDraft]) -> Void
+    /// Work read from a page, such as Classroom's to-do list.
+    var onAssignments: ([AssignmentDraft], String) -> Void
     var onCancel: () -> Void
 
     @State private var windows: [CapturableWindow] = []
@@ -195,7 +197,24 @@ struct WindowChooserView: View {
         do {
             let page = try await BrowserDOM.read(window, tab: selectedTab)
 
-            // Course links first, which give a name that cannot be clipped. Where
+            // A page that wants a sign-in has nothing on it, and saying "no
+            // classes found" would send the student looking for the wrong fault.
+            guard !SignInDetector.isSignInPage(page) else {
+                isReadingPage = false
+                errorText = "That page is asking you to sign in. Sign in to it in your browser, then read it again."
+                return
+            }
+
+            // Work first: a to-do page is full of assignment links and no course
+            // links, so looking for classes there would find nothing.
+            let assignments = DOMAssignmentReader.assignments(from: page)
+            if assignments.count >= 2 || (assignments.count == 1 && DOMClassReader.classes(from: page).isEmpty) {
+                isReadingPage = false
+                onAssignments(assignments, page.url)
+                return
+            }
+
+            // Course links next, which give a name that cannot be clipped. Where
             // a portal has no such links — most do not — the page's own text is
             // still far better than a picture of it.
             var classes = DOMClassReader.classes(from: page)
@@ -205,7 +224,7 @@ struct WindowChooserView: View {
             isReadingPage = false
 
             guard !classes.isEmpty else {
-                errorText = "No classes were found on that page. Try Capture instead, or open the page that lists the classes."
+                errorText = "Nothing was found on that page. Open the page that lists your classes or your work, or use Capture instead."
                 return
             }
             onClasses(classes)

@@ -29,6 +29,10 @@ struct ScreenshotImportView: View {
     @State private var duplicateOverridden = false
     @State private var scheduleDuplicates: [UUID: DuplicateDetector.Match] = [:]
     @State private var hasClipboardImage = false
+    /// Work read from a page, awaiting review.
+    @State private var assignments: [AssignmentDraft] = []
+    @State private var assignmentDuplicates: [UUID: DuplicateDetector.Match] = [:]
+    @State private var readPageURL = ""
     @State private var isChoosingWindow = false
     @State private var readingMessage = "Reading…"
 
@@ -49,7 +53,9 @@ struct ScreenshotImportView: View {
         VStack(spacing: 0) {
             header
             Divider()
-            if let schedule {
+            if !assignments.isEmpty {
+                assignmentListReview
+            } else if let schedule {
                 scheduleReview(schedule)
             } else if draft == nil {
                 dropZone
@@ -71,6 +77,13 @@ struct ScreenshotImportView: View {
                     engine = .page
                     schedule = ScheduleDraft(rows: classes)
                     checkScheduleDuplicates()
+                },
+                onAssignments: { work, pageURL in
+                    isChoosingWindow = false
+                    engine = .page
+                    readPageURL = pageURL
+                    assignments = work
+                    checkAssignmentDuplicates()
                 },
                 onCancel: { isChoosingWindow = false }
             )
@@ -345,10 +358,11 @@ struct ScreenshotImportView: View {
                 Button("This is one assignment", action: rereadAsAssignment)
                     .help("Read this screenshot as a single assignment instead")
             }
-            if draft != nil || schedule != nil {
+            if draft != nil || schedule != nil || !assignments.isEmpty {
                 Button("Start over") {
                     draft = nil
                     schedule = nil
+                    assignments = []
                     engine = nil
                     errorText = nil
                 }
@@ -635,6 +649,9 @@ struct ScreenshotImportView: View {
     }
 
     private var headerSubtitle: String {
+        if !assignments.isEmpty {
+            return "Found \(assignments.count) piece\(assignments.count == 1 ? "" : "s") of work. Pick what to add."
+        }
         if schedule != nil { return "Found a schedule. Pick which classes to add." }
         if draft != nil { return engine?.explanation ?? "" }
         return "Works with Google Classroom, Skyward, Canvas — anything on screen."
@@ -842,6 +859,137 @@ struct ScreenshotImportView: View {
         rebuilt.rows = TableScheduleBuilder.rows(from: table, roles: current.roles)
         schedule = rebuilt
         checkScheduleDuplicates()
+    }
+
+    private var selectedAssignmentCount: Int { assignments.filter(\.include).count }
+
+    /// Flags work already on the list, so re-reading a to-do page adds only what
+    /// is new.
+    private func checkAssignmentDuplicates() {
+        let candidates = app.allAssignments().map {
+            DuplicateDetector.AssignmentCandidate(
+                id: $0.idString, title: $0.title, classID: $0.schoolClass?.idString,
+                dueAt: $0.dueAt, isDone: $0.isDone
+            )
+        }
+        var found: [UUID: DuplicateDetector.Match] = [:]
+        for index in assignments.indices {
+            let item = assignments[index]
+            let matchedClass = classes.first { SyncMerger.namesMatch($0.name, item.className) }
+            guard let match = DuplicateDetector.assignment(
+                title: item.title, classID: matchedClass?.idString, dueAt: item.dueAt, among: candidates
+            ) else { continue }
+            found[item.id] = match
+            if match.confidence == .certain { assignments[index].include = false }
+        }
+        assignmentDuplicates = found
+    }
+
+    @ViewBuilder
+    private var assignmentListReview: some View {
+        Form {
+            Section {
+                ForEach(Array(assignments.enumerated()), id: \.element.id) { index, item in
+                    HStack(spacing: 8) {
+                        Toggle("", isOn: Binding(
+                            get: { assignments[index].include },
+                            set: { assignments[index].include = $0 }
+                        ))
+                        .labelsHidden()
+
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(item.title)
+                                .font(.system(size: 12, weight: .medium))
+                                .lineLimit(1)
+                            if let match = assignmentDuplicates[item.id] {
+                                Text(match.confidence == .certain
+                                     ? "Already on your list — tick to add it again"
+                                     : match.reason)
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(match.confidence == .certain ? Theme.overdue : Theme.highlighterDeep)
+                                    .lineLimit(1)
+                            } else if !item.className.isEmpty {
+                                Text(item.className)
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.tertiary)
+                                    .lineLimit(1)
+                            }
+                        }
+
+                        Spacer(minLength: 0)
+
+                        if let due = item.dueAt {
+                            Text(DueFormat.text(for: due, hasTime: item.hasDueTime))
+                                .font(Theme.data(10))
+                                .foregroundStyle(DueFormat.urgency(for: due).color)
+                        } else {
+                            Text("no date").font(Theme.data(10)).foregroundStyle(.quaternary)
+                        }
+                    }
+                }
+            } header: {
+                HStack {
+                    Text("Work found")
+                    Spacer()
+                    Button(selectedAssignmentCount == assignments.count ? "Deselect all" : "Select all") {
+                        let turnOn = selectedAssignmentCount != assignments.count
+                        for index in assignments.indices { assignments[index].include = turnOn }
+                    }
+                    .buttonStyle(.link)
+                    .font(.system(size: 11))
+                }
+            } footer: {
+                Text("Each one is matched to a class by name. Anything already on your list is unticked.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+
+            if SavedPage.isReusable(readPageURL), !app.settings.savedPages.contains(where: { $0.url == readPageURL }) {
+                Section {
+                    Button("Remember this page") { rememberPage() }
+                } footer: {
+                    Text("Saves the address so you can check it again later without finding the tab.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func rememberPage() {
+        var saved = app.settings.savedPages
+        saved.removeAll { $0.url == readPageURL }
+        saved.append(SavedPage(
+            url: readPageURL,
+            name: SavedPage.suggestedName(for: readPageURL, title: "Work"),
+            lastReadAt: Date(),
+            lastResult: "\(assignments.count) found"
+        ))
+        app.settings.savedPages = Array(saved.suffix(8))
+        app.save()
+    }
+
+    private func saveAssignments() {
+        for item in assignments where item.include {
+            let matchedClass = classes.first { SyncMerger.namesMatch($0.name, item.className) }
+            let assignment = Assignment(
+                title: item.title,
+                schoolClass: matchedClass,
+                dueAt: item.dueAt,
+                hasDueTime: item.hasDueTime,
+                type: item.type
+            )
+            if !item.url.isEmpty {
+                assignment.externalRefs = [ExternalRef(
+                    source: .googleClassroom, externalID: item.externalID, url: item.url
+                )]
+            }
+            app.context.insert(assignment)
+        }
+        app.save()
+        Task { await app.rescheduleReminders() }
+        dismiss()
     }
 
     private func saveSchedule() {
