@@ -37,6 +37,12 @@ enum SettingsTab: String, CaseIterable, Identifiable, Hashable {
 }
 
 /// SwiftUI honours only one `.sheet` per view, so every modal goes through here.
+/// Where the importer should start.
+enum ImportEntry: Sendable {
+    /// Straight to the browser-page reader, skipping the screenshot choices.
+    case browserPage
+}
+
 enum ActiveSheet: String, Identifiable {
     case onboarding, quickAdd, screenshotImport
     var id: String { rawValue }
@@ -59,6 +65,8 @@ final class AppState: ObservableObject {
     @Published var quickAddSeedText = ""
     /// Set when a screenshot is dropped on the window, consumed by the import sheet.
     @Published var droppedProviders: [NSItemProvider] = []
+    /// Which way in the importer should open on, when it isn't the usual one.
+    @Published var importEntry: ImportEntry?
     @Published var syncStatus: SyncStatus = .idle
     @Published var selectedClassID: PersistentIdentifier?
     @Published var lastError: String?

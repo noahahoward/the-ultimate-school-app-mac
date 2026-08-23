@@ -192,7 +192,9 @@ struct ScreenshotImportView: View {
         .onAppear {
             // Dev affordance, same shape as LOCKER_SEED: read a given file on
             // open so the review screens can be checked without clicking through.
-            if ProcessInfo.processInfo.environment["LOCKER_OPEN"] == "windows" {
+            if app.importEntry == .browserPage
+                || ProcessInfo.processInfo.environment["LOCKER_OPEN"] == "windows" {
+                app.importEntry = nil
                 isChoosingWindow = true
                 return
             }

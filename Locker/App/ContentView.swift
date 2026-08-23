@@ -38,6 +38,18 @@ struct ContentView: View {
         } detail: {
             detail
                 .toolbar {
+                    if BrowserTabs.anyBrowserRunning {
+                        ToolbarItem(placement: .primaryAction) {
+                            Button {
+                                app.importEntry = .browserPage
+                                app.activeSheet = .screenshotImport
+                            } label: {
+                                Label("Read a browser page", systemImage: "doc.text.magnifyingglass")
+                            }
+                            .keyboardShortcut("r", modifiers: [.command, .option])
+                            .help("Read your classes straight from a browser page (⌥⌘R)")
+                        }
+                    }
                     ToolbarItem(placement: .primaryAction) {
                         Button { app.activeSheet = .screenshotImport } label: {
                             Label("Add from screenshot", systemImage: "photo.on.rectangle.angled")

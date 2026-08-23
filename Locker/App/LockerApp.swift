@@ -38,6 +38,17 @@ struct LockerApp: App {
                 CheckForUpdatesMenuItem(app: app)
             }
             CommandMenu("Sync") {
+                Button("Read a Browser Page…") {
+                    app.importEntry = .browserPage
+                    app.activeSheet = .screenshotImport
+                }
+                .keyboardShortcut("r", modifiers: [.command, .option])
+
+                Button("Add from a Screenshot…") { app.activeSheet = .screenshotImport }
+                    .keyboardShortcut("i", modifiers: [.command, .shift])
+
+                Divider()
+
                 Button("Sync Now") { Task { await app.syncAll() } }
                     .keyboardShortcut("r", modifiers: .command)
             }
