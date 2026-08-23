@@ -43,6 +43,17 @@ enum BrowserTabs {
         }
     }
 
+    /// Whether any browser Locker can read is open.
+    ///
+    /// Checked against running applications rather than windows, because listing
+    /// windows needs Screen Recording permission and this is only deciding
+    /// whether to offer the option.
+    static var anyBrowserRunning: Bool {
+        NSWorkspace.shared.runningApplications.contains { app in
+            Kind(bundleIdentifier: app.bundleIdentifier) != nil
+        }
+    }
+
     /// How long to wait on the browser before giving up. The first call can put a
     /// permission dialog on screen, and Locker must not sit frozen behind it.
     static let timeout: TimeInterval = 4

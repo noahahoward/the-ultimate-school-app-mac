@@ -119,6 +119,19 @@ struct ScreenshotImportView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
 
+                    // Worth its own place on the first screen: it is the only way
+                    // to get names the page cuts short, and it was too easy to
+                    // miss one level down.
+                    if BrowserTabs.anyBrowserRunning {
+                        Button { isChoosingWindow = true } label: {
+                            Label("Read a browser page", systemImage: "doc.text.magnifyingglass")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        .help("Reads a page in your browser, so long class names aren't cut short")
+                    }
+
                     HStack(spacing: 8) {
                         Button(action: captureFromScreen) {
                             Label("Select an area", systemImage: "camera.viewfinder")
@@ -138,7 +151,9 @@ struct ScreenshotImportView: View {
                 .padding(.horizontal, 40)
                 .padding(.top, 4)
 
-                Text("Picking a window lets you set the page up first — the crosshair blocks clicking.")
+                Text(BrowserTabs.anyBrowserRunning
+                     ? "Reading a browser page keeps long class names whole. Picking a window lets you set the page up first — the crosshair blocks clicking."
+                     : "Picking a window lets you set the page up first — the crosshair blocks clicking.")
                     .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)

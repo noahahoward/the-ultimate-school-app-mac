@@ -165,7 +165,9 @@ struct WindowChooserView: View {
         errorText = nil
         do {
             windows = try await WindowCapture.available()
-            selected = windows.first
+            // A browser is the window worth landing on: it is the only one whose
+            // page can be read rather than photographed.
+            selected = windows.first { $0.isBrowser } ?? windows.first
             if let selected, selected.isBrowser { Task { await loadTabs(for: selected) } }
         } catch {
             windows = []
