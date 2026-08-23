@@ -33,7 +33,7 @@ enum FieldParsing {
         if words.count > 2, let year = Int(words[2]), year > 1900 {
             var comps = DateComponents()
             comps.year = year; comps.month = month; comps.day = day
-            return calendar.date(from: comps).map { calendar.startOfDay(for: $0) }
+            return realDate(from: comps, calendar: calendar)
         }
         return nextOccurrence(month: month, day: day, onOrAfter: now, calendar: calendar)
     }
@@ -48,7 +48,7 @@ enum FieldParsing {
             var comps = DateComponents()
             comps.year = rawYear < 100 ? 2000 + rawYear : rawYear
             comps.month = month; comps.day = day
-            return calendar.date(from: comps).map { calendar.startOfDay(for: $0) }
+            return realDate(from: comps, calendar: calendar)
         }
         return nextOccurrence(month: month, day: day, onOrAfter: now, calendar: calendar)
     }
@@ -68,14 +68,28 @@ enum FieldParsing {
         var comps = calendar.dateComponents([.year], from: now)
         comps.month = month
         comps.day = day
-        guard let thisYear = calendar.date(from: comps).map({ calendar.startOfDay(for: $0) }) else { return nil }
+        guard let thisYear = realDate(from: comps, calendar: calendar) else { return nil }
 
         let today = calendar.startOfDay(for: now)
         let sixMonths: TimeInterval = 182 * 24 * 3600
         if thisYear >= today.addingTimeInterval(-sixMonths) { return thisYear }
 
         comps.year = (comps.year ?? 2000) + 1
-        return calendar.date(from: comps).map { calendar.startOfDay(for: $0) }
+        return realDate(from: comps, calendar: calendar)
+    }
+
+    /// Builds a date only if it actually exists.
+    ///
+    /// `Calendar` quietly rolls impossible dates forward — 31 September becomes
+    /// 1 October, 30 February becomes 2 March — so OCR noise that fuses a stray
+    /// digit onto a day would produce a confident, wrong due date.
+    static func realDate(from comps: DateComponents, calendar: Calendar) -> Date? {
+        guard let date = calendar.date(from: comps) else { return nil }
+        let rebuilt = calendar.dateComponents([.year, .month, .day], from: date)
+        guard rebuilt.year == comps.year,
+              rebuilt.month == comps.month,
+              rebuilt.day == comps.day else { return nil }
+        return calendar.startOfDay(for: date)
     }
 
     /// "4 points" -> 4. "100 pts" -> 100. "Ungraded" -> nil.
@@ -89,18 +103,24 @@ enum FieldParsing {
 
     /// Maps a status label to done/not done. Anything unrecognized stays nil so
     /// the importer leaves the assignment alone rather than guessing.
+    ///
+    /// Negations are tested first, and it matters enormously: every one of them
+    /// contains the word it negates. "Not submitted" contains "submitted", and
+    /// checking the positive list first marks unfinished work as done — the
+    /// worst thing a planner can get wrong.
     static func isTurnedIn(from raw: String) -> Bool? {
         let text = raw.lowercased()
-        if text.contains("turned in") || text.contains("handed in")
-            || text.contains("submitted") || text.contains("returned")
-            || text.contains("done") || text.contains("complete") {
-            return true
-        }
-        if text.contains("assigned") || text.contains("missing")
-            || text.contains("not turned in") || text.contains("no submission")
-            || text.contains("to do") {
-            return false
-        }
+
+        let notDone = [
+            "not turned in", "not submitted", "not handed in", "not done",
+            "unsubmitted", "incomplete", "no submission", "missing",
+            "assigned", "to do", "past due", "late",
+        ]
+        if notDone.contains(where: { text.contains($0) }) { return false }
+
+        let done = ["turned in", "handed in", "submitted", "returned", "done", "complete"]
+        if done.contains(where: { text.contains($0) }) { return true }
+
         return nil
     }
 

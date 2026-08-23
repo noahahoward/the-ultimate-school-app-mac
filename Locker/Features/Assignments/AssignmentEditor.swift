@@ -11,6 +11,8 @@ struct AssignmentEditor: View {
     @State private var hasDueDate: Bool
     @State private var dueDate: Date
     @State private var includeTime: Bool
+    @State private var repeatCount = 0
+    @State private var isConfirmingDelete = false
 
     init(assignment: Assignment) {
         self.assignment = assignment
@@ -58,6 +60,19 @@ struct AssignmentEditor: View {
                     }
                 }
 
+                Section("Repeat") {
+                    Stepper(repeatCount == 0
+                            ? "Doesn't repeat"
+                            : "Also add \(repeatCount) more, a week apart",
+                            value: $repeatCount, in: 0...Recurrence.maximumRepeats)
+                        .disabled(!hasDueDate)
+                    if !hasDueDate {
+                        Text("Give it a due date to repeat it.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 Section("Planning") {
                     TextField("Estimated minutes", value: $assignment.estimatedMinutes, format: .number)
                     Toggle("Mute reminders for this", isOn: $assignment.remindersSuppressed)
@@ -86,11 +101,21 @@ struct AssignmentEditor: View {
             Divider()
 
             HStack {
-                Button("Delete", role: .destructive) {
-                    app.context.delete(assignment)
-                    app.save()
-                    dismiss()
-                }
+                Button("Delete", role: .destructive) { isConfirmingDelete = true }
+                    .confirmationDialog(
+                        "Delete “\(assignment.title)”?",
+                        isPresented: $isConfirmingDelete,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Delete", role: .destructive) {
+                            app.context.delete(assignment)
+                            app.save()
+                            dismiss()
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("This can't be undone.")
+                    }
                 if let url = assignment.externalRefs.compactMap(\.url).first, let link = URL(string: url) {
                     Button("Open in Classroom") { NSWorkspace.shared.open(link) }
                 }
@@ -111,6 +136,33 @@ struct AssignmentEditor: View {
         )
     }
 
+    /// Copies the assignment forward a week at a time. Made once, here, rather
+    /// than by a rule the app has to keep evaluating forever.
+    private func addRepeats() {
+        guard repeatCount > 0, hasDueDate else { return }
+        let dates = Recurrence.weekly(
+            after: dueDate,
+            count: repeatCount,
+            notLaterThan: app.settings.lastDayOfSchool
+        )
+        for date in dates {
+            let copy = Assignment(
+                title: assignment.title,
+                schoolClass: assignment.schoolClass,
+                dueAt: date,
+                hasDueTime: assignment.hasDueTime,
+                type: assignment.type,
+                priority: assignment.priority,
+                notes: assignment.notes,
+                estimatedMinutes: assignment.estimatedMinutes
+            )
+            copy.maxScore = assignment.maxScore
+            copy.gradeCategory = assignment.gradeCategory
+            app.context.insert(copy)
+        }
+        repeatCount = 0
+    }
+
     private var typeBinding: Binding<AssignmentType> {
         Binding(get: { assignment.type }, set: { assignment.type = $0 })
     }
@@ -122,6 +174,7 @@ struct AssignmentEditor: View {
     private func commit() {
         assignment.dueAt = hasDueDate ? dueDate : nil
         assignment.hasDueTime = hasDueDate && includeTime
+        addRepeats()
         app.save()
         Task { await app.rescheduleReminders() }
         dismiss()

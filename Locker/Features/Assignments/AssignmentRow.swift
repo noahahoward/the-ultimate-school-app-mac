@@ -5,6 +5,7 @@ struct AssignmentRow: View {
     @Bindable var assignment: Assignment
     var showDueDate = true
     var showClass = true
+    @State private var isConfirmingDelete = false
 
     private var tint: Color {
         assignment.schoolClass.map { Theme.classColor($0.colorHex) } ?? .secondary
@@ -84,10 +85,23 @@ struct AssignmentRow: View {
             Button("Due tomorrow") { setDue(daysFromNow: 1) }
             Button("Due next week") { setDue(daysFromNow: 7) }
             Divider()
+            Button("Delete", role: .destructive) { isConfirmingDelete = true }
+        }
+        .confirmationDialog(
+            "Delete “\(assignment.title)”?",
+            isPresented: $isConfirmingDelete,
+            titleVisibility: .visible
+        ) {
             Button("Delete", role: .destructive) {
                 app.context.delete(assignment)
                 app.save()
+                Task { await app.rescheduleReminders() }
             }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            // Delete sits next to "Mark as done" in the same menu, and there is
+            // no undo.
+            Text("This can't be undone.")
         }
     }
 

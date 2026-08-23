@@ -85,14 +85,29 @@ enum ScheduleParsing {
 
     // MARK: - Field patterns
 
+    /// Lines naming a place rather than a time. "Rm P12" and "Bldg S2" are real
+    /// labels, and the bare "p"/"s" shorthands would otherwise read them as a
+    /// period and a semester, inventing a class out of a room number.
+    static func namesAPlace(_ lower: String) -> Bool {
+        ["rm ", "rm.", "room", "bldg", "building", "hall", "portable", "annex"]
+            .contains { lower.contains($0) }
+    }
+
     /// "Period 3", "Per 3", "P3", "3rd Period".
     static func period(in line: String) -> Int? {
         let lower = line.lowercased()
+        let spelledOutOnly = namesAPlace(lower)
         for marker in ["period ", "per ", "prd ", "p"] {
+            if marker == "p", spelledOutOnly { continue }
             var search = lower.startIndex
             while let range = lower.range(of: marker, range: search..<lower.endIndex) {
+                // A bare "p" must start a word, or "Rm P12" reads as period 12
+                // and a room label becomes a phantom class.
+                let atWordStart = range.lowerBound == lower.startIndex
+                    || !lower[lower.index(before: range.lowerBound)].isLetter
                 let digits = lower[range.upperBound...].prefix { $0.isNumber }
-                if let value = Int(digits), (1...12).contains(value) { return value }
+                if atWordStart, marker != "p" || !digits.isEmpty,
+                   let value = Int(digits), (1...12).contains(value) { return value }
                 search = range.upperBound
                 if search >= lower.endIndex { break }
             }
@@ -108,7 +123,11 @@ enum ScheduleParsing {
     static func semester(in line: String) -> Int? {
         let lower = line.lowercased()
         for marker in ["semester ", "sem ", "s"] {
+            if marker == "s", namesAPlace(lower) { continue }
             guard let range = lower.range(of: marker) else { continue }
+            let atWordStart = range.lowerBound == lower.startIndex
+                || !lower[lower.index(before: range.lowerBound)].isLetter
+            guard atWordStart else { continue }
             let digits = lower[range.upperBound...].prefix { $0.isNumber }
             if let value = Int(digits), (1...2).contains(value) { return value }
         }

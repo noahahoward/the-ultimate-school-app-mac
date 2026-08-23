@@ -169,10 +169,15 @@ public enum SyncMerger {
             assignment.title = imported.title
             updated = true
         }
-        if assignment.dueAt != imported.dueAt || assignment.hasDueTime != imported.hasDueTime {
-            assignment.dueAt = imported.dueAt
-            assignment.hasDueTime = imported.hasDueTime
-            updated = true
+        // A fetch that omits the due date must not erase one already known: the
+        // source dropping a field is far likelier than the deadline vanishing,
+        // and a due date silently becoming nil is invisible until it's missed.
+        if imported.dueAt != nil || assignment.dueAt == nil {
+            if assignment.dueAt != imported.dueAt || assignment.hasDueTime != imported.hasDueTime {
+                assignment.dueAt = imported.dueAt
+                assignment.hasDueTime = imported.hasDueTime
+                updated = true
+            }
         }
         if let points = imported.maxPoints, assignment.maxScore != points {
             assignment.maxScore = points
