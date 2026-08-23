@@ -617,6 +617,25 @@ struct ScreenshotImportView: View {
         self.schedule = updated
     }
 
+    /// Finds the class a course name refers to, or nothing if it is unclear.
+    ///
+    /// The day the work is due decides which half of the year to read it in,
+    /// since a timetable holds each course once per semester and work read
+    /// today can belong to either.
+    private func classMatching(name: String, due: Date?) -> SchoolClass? {
+        let active = classes.filter { !$0.isArchived }
+        let candidates = active.map {
+            ClassMatcher.Candidate(id: $0.idString, name: $0.name, teacher: $0.teacher,
+                                   aliases: $0.aliases, semester: $0.semester)
+        }
+        let semester = ScheduleEngine.semester(on: due ?? Date(),
+                                               config: app.settings.scheduleConfig)
+        guard let id = ClassMatcher.match(className: name, teacher: "", in: candidates,
+                                          semesterInForce: semester).id
+        else { return nil }
+        return active.first { $0.idString == id }
+    }
+
     /// Picks the class this assignment belongs to, and says how it decided.
     ///
     /// A screenshot usually names the teacher rather than the course, so the
@@ -1007,7 +1026,7 @@ struct ScreenshotImportView: View {
 
     private func saveAssignments() {
         for item in assignments where item.include {
-            let matchedClass = classes.first { SyncMerger.namesMatch($0.name, item.className) }
+            let matchedClass = classMatching(name: item.className, due: item.dueAt)
             let assignment = Assignment(
                 title: item.title,
                 schoolClass: matchedClass,
