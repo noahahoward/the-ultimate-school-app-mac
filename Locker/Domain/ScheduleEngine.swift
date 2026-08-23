@@ -181,6 +181,29 @@ public enum ScheduleEngine {
         return (current, upcoming)
     }
 
+    /// Every school day between two dates, for marking a whole break off at once.
+    /// Weekends are skipped: they were never school days to begin with.
+    public static func schoolDays(
+        from start: Date,
+        to end: Date,
+        config: ScheduleConfig,
+        calendar: Calendar = .current
+    ) -> [Date] {
+        let first = calendar.startOfDay(for: min(start, end))
+        let last = calendar.startOfDay(for: max(start, end))
+        var days: [Date] = []
+        var cursor = first
+
+        for _ in 0..<400 {
+            guard cursor <= last else { break }
+            let weekday = calendar.component(.weekday, from: cursor)
+            if config.schoolDays.contains(weekday) { days.append(cursor) }
+            guard let next = calendar.date(byAdding: .day, value: 1, to: cursor) else { break }
+            cursor = next
+        }
+        return days
+    }
+
     public static func minutesIntoDay(_ date: Date, calendar: Calendar = .current) -> Int {
         let parts = calendar.dateComponents([.hour, .minute], from: date)
         return (parts.hour ?? 0) * 60 + (parts.minute ?? 0)

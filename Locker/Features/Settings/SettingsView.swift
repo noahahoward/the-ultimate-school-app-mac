@@ -67,6 +67,8 @@ private struct GeneralSettings: View {
 
 private struct ScheduleSettings: View {
     @EnvironmentObject private var app: AppState
+    @State private var breakStart = Date()
+    @State private var breakEnd = Date()
 
     var body: some View {
         Form {
@@ -111,25 +113,42 @@ private struct ScheduleSettings: View {
                 HStack {
                     Text("\(app.settings.noSchoolDays.count) day\(app.settings.noSchoolDays.count == 1 ? "" : "s") marked")
                     Spacer()
-                    Button("Mark today off") {
-                        let today = Calendar.current.startOfDay(for: Date())
-                        if !app.settings.noSchoolDays.contains(where: { Calendar.current.isDate($0, inSameDayAs: today) }) {
-                            app.settings.noSchoolDays.append(today)
-                            app.save()
-                        }
-                    }
-                    Button("Clear") {
+                    Button("Mark today off") { markOff(from: Date(), to: Date()) }
+                    Button("Clear all") {
                         app.settings.noSchoolDays = []
                         app.save()
                     }
                     .disabled(app.settings.noSchoolDays.isEmpty)
                 }
+
+                // Breaks are weeks, not days. Marking one off a day at a time
+                // meant opening Settings every morning of the holidays.
+                DatePicker("Break from", selection: $breakStart, displayedComponents: .date)
+                DatePicker("until", selection: $breakEnd, displayedComponents: .date)
+                HStack {
+                    Spacer()
+                    Button("Mark this break off") { markOff(from: breakStart, to: breakEnd) }
+                        .disabled(breakEnd < breakStart)
+                }
+
                 Text("Days off don't break your streak and don't advance the A/B rotation.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
+    }
+
+    /// Adds every school day in a range, skipping any already marked.
+    private func markOff(from start: Date, to end: Date) {
+        let calendar = Calendar.current
+        let days = ScheduleEngine.schoolDays(from: start, to: end, config: app.scheduleConfig, calendar: calendar)
+        var marked = app.settings.noSchoolDays
+        for day in days where !marked.contains(where: { calendar.isDate($0, inSameDayAs: day) }) {
+            marked.append(day)
+        }
+        app.settings.noSchoolDays = marked.sorted()
+        app.save()
     }
 
     private func reanchor(isA: Bool) {

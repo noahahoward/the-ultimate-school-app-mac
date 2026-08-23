@@ -241,3 +241,55 @@ final class LayoutMemoryTests: XCTestCase {
         XCTAssertNotNil(LayoutMemory.roles(for: table, saved: saved), "the newest labelling must survive")
     }
 }
+
+/// A grid is not automatically a timetable. This is the failure that matters
+/// most: a misread schedule fills Classes with rubbish like "Turn in".
+final class ScheduleEvidenceTests: XCTestCase {
+
+    /// The two-column Google Classroom assignment page, as Vision reads it:
+    /// content on the left, the "Your work" panel on the right.
+    var classroomAssignment: [OCRLine] {
+        func line(_ text: String, x: Double, y: Double) -> OCRLine {
+            OCRLine(text: text, box: CGRect(x: x, y: y,
+                                            width: max(0.02, 0.011 * Double(text.count)), height: 0.03))
+        }
+        return [
+            line("Summer Homework", x: 0.05, y: 0.94),
+            line("Your work", x: 0.62, y: 0.93),
+            line("Assigned", x: 0.86, y: 0.93),
+            line("Assignment 2026", x: 0.05, y: 0.89),
+            line("NOAH HOWAR...", x: 0.62, y: 0.85),
+            line("Serena Sturgill", x: 0.05, y: 0.84),
+            line("Google Docs", x: 0.62, y: 0.81),
+            line("4 points", x: 0.05, y: 0.79),
+            line("Add or create", x: 0.62, y: 0.75),
+            line("Originality reports", x: 0.62, y: 0.70),
+            line("Turn in", x: 0.62, y: 0.60),
+        ]
+    }
+
+    func testAnAssignmentPageIsNotTreatedAsATimetable() {
+        let table = TableDetector.detect(classroomAssignment)
+        let roles = ColumnRoleGuesser.guess(for: table)
+        XCTAssertFalse(
+            roles.contains(where: ColumnRoleGuesser.isScheduleSignal),
+            "no period, time, term or day column exists here, so this must not import as a schedule"
+        )
+    }
+
+    func testARealTimetableStillPassesTheCheck() {
+        func line(_ text: String, x: Double, y: Double) -> OCRLine {
+            OCRLine(text: text, box: CGRect(x: x, y: y,
+                                            width: max(0.015, 0.012 * Double(text.count)), height: 0.03))
+        }
+        let schedule = [
+            line("1", x: 0.04, y: 0.90), line("ENGLISH 9", x: 0.14, y: 0.90), line("210", x: 0.42, y: 0.90),
+            line("2", x: 0.04, y: 0.82), line("ALGEBRA I", x: 0.14, y: 0.82), line("118", x: 0.42, y: 0.82),
+            line("3", x: 0.04, y: 0.74), line("CHOIR", x: 0.14, y: 0.74), line("305", x: 0.42, y: 0.74),
+        ]
+        let table = TableDetector.detect(schedule)
+        let roles = ColumnRoleGuesser.guess(for: table)
+        XCTAssertTrue(roles.contains(where: ColumnRoleGuesser.isScheduleSignal),
+                      "a period column is exactly the evidence a timetable provides")
+    }
+}

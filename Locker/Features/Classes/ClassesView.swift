@@ -6,6 +6,7 @@ struct ClassesView: View {
     @Query(sort: \SchoolClass.sortIndex) private var classes: [SchoolClass]
     @State private var editing: SchoolClass?
     @State private var showArchived = false
+    @State private var pendingDeletion: SchoolClass?
 
     private var visible: [SchoolClass] {
         classes.filter { showArchived || !$0.isArchived }
@@ -49,6 +50,31 @@ struct ClassesView: View {
             }
         }
         .sheet(item: $editing) { ClassEditor(schoolClass: $0).environmentObject(app) }
+        .confirmationDialog(
+            "Delete \(pendingDeletion?.name ?? "this class")?",
+            isPresented: Binding(get: { pendingDeletion != nil }, set: { if !$0 { pendingDeletion = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Delete the class and its work", role: .destructive) {
+                guard let schoolClass = pendingDeletion else { return }
+                app.context.delete(schoolClass)
+                app.save()
+                pendingDeletion = nil
+            }
+            Button("Archive it instead") {
+                pendingDeletion?.isArchived = true
+                app.save()
+                pendingDeletion = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDeletion = nil }
+        } message: {
+            // Deleting cascades to everything attached to the class, and there
+            // is no undo, so the count is spelled out before it happens.
+            let assignments = pendingDeletion?.assignments.count ?? 0
+            Text(assignments == 0
+                 ? "This can't be undone. Archiving keeps it out of the way instead."
+                 : "This also deletes \(assignments) assignment\(assignments == 1 ? "" : "s") and any grades recorded for it. This can't be undone.")
+        }
         .onAppear {
             if let id = app.selectedClassID {
                 editing = classes.first { $0.persistentModelID == id }
@@ -127,10 +153,7 @@ struct ClassesView: View {
                 app.save()
             }
             Divider()
-            Button("Delete", role: .destructive) {
-                app.context.delete(schoolClass)
-                app.save()
-            }
+            Button("Delete", role: .destructive) { pendingDeletion = schoolClass }
         }
     }
 

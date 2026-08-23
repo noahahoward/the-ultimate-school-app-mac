@@ -8,6 +8,8 @@ struct TodayView: View {
     @Query private var decks: [Deck]
 
     @State private var now = Date()
+    /// Days away from today, so Sunday night can check what Monday looks like.
+    @State private var dayOffset = 0
     @State private var quickText = ""
     @State private var editing: Assignment?
 
@@ -19,12 +21,18 @@ struct TodayView: View {
                 VStack(alignment: .leading, spacing: Theme.gutter) {
                     Panel {
                         DaySpine(
-                            date: now,
+                            date: viewedDate,
                             classes: activeClasses,
                             config: app.scheduleConfig,
                             dueCountByClassID: dueCountByClass,
                             now: now,
-                            onSelectClass: { app.selectedClassID = $0.persistentModelID; app.section = .classes }
+                            onSelectClass: { app.selectedClassID = $0.persistentModelID; app.section = .classes },
+                            onStep: { step in
+                                withAnimation(.snappy(duration: 0.15)) {
+                                    dayOffset = step == 0 ? 0 : dayOffset + step
+                                }
+                            },
+                            isShowingToday: dayOffset == 0
                         )
                     }
                     statsCard
@@ -52,6 +60,11 @@ struct TodayView: View {
 
     private var activeClasses: [SchoolClass] { classes.filter { !$0.isArchived } }
 
+    /// The day the spine is showing, which is today unless it's been stepped.
+    private var viewedDate: Date {
+        Calendar.current.date(byAdding: .day, value: dayOffset, to: now) ?? now
+    }
+
     private var open: [Assignment] {
         assignments.filter { !$0.isDone }
     }
@@ -60,7 +73,7 @@ struct TodayView: View {
         var counts: [String: Int] = [:]
         let calendar = Calendar.current
         for assignment in open {
-            guard let dueAt = assignment.dueAt, calendar.isDate(dueAt, inSameDayAs: now),
+            guard let dueAt = assignment.dueAt, calendar.isDate(dueAt, inSameDayAs: viewedDate),
                   let id = assignment.schoolClass?.idString else { continue }
             counts[id, default: 0] += 1
         }
@@ -222,6 +235,10 @@ struct TodayView: View {
     private func sorted(_ items: [Assignment]) -> [Assignment] {
         items.sorted { lhs, rhs in
             if lhs.priority != rhs.priority { return lhs.priority > rhs.priority }
+            // Most work is entered without a time, so same-day items would
+            // otherwise fall back to alphabetical order and bury a test under
+            // a reading log.
+            if lhs.type.isBigDeal != rhs.type.isBigDeal { return lhs.type.isBigDeal }
             switch (lhs.dueAt, rhs.dueAt) {
             case let (l?, r?) where l != r: return l < r
             case (nil, .some): return false

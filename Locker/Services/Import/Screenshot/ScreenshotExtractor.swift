@@ -113,7 +113,11 @@ enum ScreenshotExtractor {
             if table.isUsable {
                 let roles = ColumnRoleGuesser.guess(for: table)
                 let rows = TableScheduleBuilder.rows(from: table, roles: roles)
-                if rows.count >= 2 {
+                // A grid alone is not a timetable. A Google Classroom assignment
+                // page is two columns too, and reading it as a schedule turns
+                // "Turn in" and "Originality reports" into school classes.
+                // Something only a schedule has must be present.
+                if rows.count >= 2, roles.contains(where: ColumnRoleGuesser.isScheduleSignal) {
                     return .success(ExtractionOutcome(
                         content: .schedule(ScheduleDraft(rows: rows, table: table, roles: roles)),
                         engine: .table,

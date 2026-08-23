@@ -8,6 +8,12 @@ import Foundation
 /// same on every Mac with no model involved.
 enum ColumnRoleGuesser {
 
+    /// Columns only a timetable has. A page with names and nothing else is not
+    /// a schedule, however neatly it happens to line up.
+    static func isScheduleSignal(_ role: ColumnRole) -> Bool {
+        role == .period || role == .times || role == .term || role == .days
+    }
+
     static func guess(for table: DetectedTable) -> [ColumnRole] {
         guard table.columnCount > 0 else { return [] }
 

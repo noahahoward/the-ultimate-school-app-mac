@@ -136,3 +136,44 @@ final class ScheduleEngineTests: XCTestCase {
         )
     }
 }
+
+extension ScheduleEngineTests {
+
+    func testAWholeBreakCanBeMarkedOffAtOnce() {
+        // Mon 21 Dec to Fri 1 Jan is two school weeks with a weekend between.
+        let days = ScheduleEngine.schoolDays(
+            from: TestClock.date(2026, 12, 21),
+            to: TestClock.date(2027, 1, 1),
+            config: ScheduleConfig(),
+            calendar: calendar
+        )
+        XCTAssertEqual(days.count, 10, "ten weekdays, weekends excluded")
+        XCTAssertEqual(days.first, TestClock.date(2026, 12, 21))
+        XCTAssertEqual(days.last, TestClock.date(2027, 1, 1))
+        XCTAssertFalse(days.contains(TestClock.date(2026, 12, 26)), "that Saturday was never a school day")
+    }
+
+    func testASingleDayRangeIsJustThatDay() {
+        let days = ScheduleEngine.schoolDays(
+            from: TestClock.date(2026, 9, 3), to: TestClock.date(2026, 9, 3),
+            config: ScheduleConfig(), calendar: calendar
+        )
+        XCTAssertEqual(days, [TestClock.date(2026, 9, 3)])
+    }
+
+    func testABackwardsRangeStillWorks() {
+        let days = ScheduleEngine.schoolDays(
+            from: TestClock.date(2026, 9, 4), to: TestClock.date(2026, 9, 2),
+            config: ScheduleConfig(), calendar: calendar
+        )
+        XCTAssertEqual(days.count, 3)
+    }
+
+    func testAWeekendOnlyRangeMarksNothing() {
+        let days = ScheduleEngine.schoolDays(
+            from: TestClock.date(2026, 9, 5), to: TestClock.date(2026, 9, 6),
+            config: ScheduleConfig(), calendar: calendar
+        )
+        XCTAssertTrue(days.isEmpty)
+    }
+}

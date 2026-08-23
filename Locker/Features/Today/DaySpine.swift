@@ -12,6 +12,9 @@ struct DaySpine: View {
     var dueCountByClassID: [String: Int]
     var now: Date
     var onSelectClass: (SchoolClass) -> Void
+    /// Supplied when the day can be stepped through; nil hides the controls.
+    var onStep: ((Int) -> Void)?
+    var isShowingToday = true
 
     private let timeGutter: CGFloat = 52
     private let railWidth: CGFloat = 3
@@ -83,6 +86,20 @@ struct DaySpine: View {
                     .background(Capsule().fill(Theme.accent.opacity(0.14)))
             }
             Spacer(minLength: 0)
+
+            if let onStep {
+                HStack(spacing: 2) {
+                    Button { onStep(-1) } label: { Image(systemName: "chevron.left") }
+                        .help("The day before")
+                    if !isShowingToday {
+                        Button("Today") { onStep(0) }
+                    }
+                    Button { onStep(1) } label: { Image(systemName: "chevron.right") }
+                        .help("The next day")
+                }
+                .buttonStyle(.borderless)
+                .font(.system(size: 11))
+            }
         }
     }
 

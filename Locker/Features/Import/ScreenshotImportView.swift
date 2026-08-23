@@ -218,7 +218,9 @@ struct ScreenshotImportView: View {
 
                     HStack {
                         Text("Out of")
-                        TextField("Points", value: $maxPoints, format: .number).frame(width: 70)
+                        TextField("Points", value: $maxPoints, format: .number)
+                            .labelsHidden()
+                            .frame(width: 70)
                         Spacer()
                     }
 
