@@ -624,10 +624,13 @@ struct ScreenshotImportView: View {
     private func applyClassMatch(className: String, teacher: String) {
         let active = classes.filter { !$0.isArchived }
         let candidates = active.map {
-            ClassMatcher.Candidate(id: $0.idString, name: $0.name, teacher: $0.teacher, aliases: $0.aliases)
+            ClassMatcher.Candidate(id: $0.idString, name: $0.name, teacher: $0.teacher,
+                                   aliases: $0.aliases, semester: $0.semester)
         }
+        let running = ScheduleEngine.semester(on: Date(), config: app.settings.scheduleConfig)
 
-        switch ClassMatcher.match(className: className, teacher: teacher, in: candidates) {
+        switch ClassMatcher.match(className: className, teacher: teacher,
+                                  in: candidates, semesterInForce: running) {
         case .matched(let id, let reason):
             let matched = active.first { $0.idString == id }
             selectedClassID = matched?.persistentModelID
