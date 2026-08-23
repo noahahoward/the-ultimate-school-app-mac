@@ -12,8 +12,8 @@ server, nothing to sign up for. Google Classroom sync is optional.
 
 **Today** — the day drawn to scale. Class blocks are sized and placed by their
 real times, with a line marking the current moment, so a glance answers "where
-am I and what's next". Everything due is grouped beside it: overdue, today,
-tomorrow, this week.
+am I and what's next". Step forward a day to see what tomorrow looks like.
+Everything due is grouped beside it: overdue, today, tomorrow, this week.
 
 **Add work by typing it.** `bio lab report due fri` becomes a lab report for
 Biology due Friday. It reads class names and nicknames, dates (`tomorrow`,
@@ -21,11 +21,15 @@ Biology due Friday. It reads class names and nicknames, dates (`tomorrow`,
 (test, quiz, essay, reading…), priority (`!!`), and effort (`45m`, `2 hours`).
 ⌃⌥Space opens the box from any app.
 
-**Classes** — meeting days, times, room, teacher, color, and A/B block schedules.
-If the rotation drifts after a snow day, one click in Settings resets it.
+**Classes** — meeting days, times, room, teacher, color, and A/B block schedules,
+including schools that run a different timetable each semester. If the rotation
+drifts after a snow day, one click in Settings resets it, and a whole break can
+be marked off as a date range.
 
 **Assignments** — a list grouped by urgency, or a week grid you can drag work
-around in.
+around in. Anything standing, like a Monday reading log, can repeat weekly.
+Tests and projects sort above ordinary homework due the same day, and deleting
+something asks first.
 
 **Focus** — a pomodoro timer that can be pointed at a specific assignment and
 keeps a record of the minutes you actually put in.
@@ -117,6 +121,22 @@ worse than an empty one:
 Needs Apple Intelligence for step 2. Without it, Locker falls back to matching the
 labels school software prints ("Due …", "N points"), and everything else is
 unchanged. Nothing is ever uploaded.
+
+## Not guessing
+
+A planner full of wrong dates is worse than an empty one, so importing is built
+to leave a field blank rather than fill it with something plausible:
+
+- Anything the model reports has to appear word-for-word in the screenshot, or
+  it is dropped and listed as ignored.
+- Dates and numbers are converted in Swift, not by the model. A date that
+  doesn't exist is rejected rather than rolled forward.
+- A grid alone isn't a timetable — importing a schedule needs a column only a
+  schedule has, so an assignment page can't become a list of classes.
+- "Not submitted" means not submitted. Negations are checked before the words
+  they negate.
+- Work already in Locker is reported before it can be added twice, and adding
+  it anyway is a deliberate tick.
 
 ## Icon
 
