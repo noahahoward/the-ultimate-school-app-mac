@@ -144,7 +144,7 @@ struct OnboardingView: View {
                 }
                 Button(isConnecting ? "Connecting…" : "Set up Google Classroom") {
                     app.section = .today
-                    finish(openSettings: true)
+                    finish()
                 }
                 .disabled(isConnecting)
             }
@@ -216,7 +216,7 @@ struct OnboardingView: View {
         newClassName = ""
     }
 
-    private func finish(openSettings: Bool = false) {
+    private func finish() {
         app.settings.hasCompletedOnboarding = true
         app.save()
         dismiss()

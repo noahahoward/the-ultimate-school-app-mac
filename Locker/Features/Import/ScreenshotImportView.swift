@@ -20,8 +20,9 @@ struct ScreenshotImportView: View {
     @State private var isReading = false
     @State private var errorText: String?
     @State private var isTargeted = false
-    /// Kept so the screenshot can be re-read the other way when detection is wrong.
-    @State private var lastImage: CGImage?
+    /// Kept so anything imported can be re-read the other way when detection is
+    /// wrong — text, not the image, so it works for PDFs and text files too.
+    @State private var lastOCR: OCRResult?
     @State private var lastOCRText = ""
     @State private var lastLines: [OCRLine] = []
     @State private var duplicate: DuplicateDetector.Match?
@@ -146,6 +147,12 @@ struct ScreenshotImportView: View {
             load(from: providers)
         }
         .onAppear {
+            // Dev affordance, same shape as LOCKER_SEED: read a given file on
+            // open so the review screens can be checked without clicking through.
+            if let path = ProcessInfo.processInfo.environment["LOCKER_IMPORT_FILE"] {
+                readFile(at: URL(fileURLWithPath: path))
+                return
+            }
             // Only act on a dropped file. Reading the clipboard unasked meant the
             // sheet started working the instant it opened, with nothing chosen.
             if !app.droppedProviders.isEmpty {
@@ -283,7 +290,7 @@ struct ScreenshotImportView: View {
                 Button("This is a schedule", action: rereadAsSchedule)
                     .help("Read this screenshot as a list of classes instead")
             }
-            if schedule != nil, lastImage != nil {
+            if schedule != nil, lastOCR != nil {
                 Button("This is one assignment", action: rereadAsAssignment)
                     .help("Read this screenshot as a single assignment instead")
             }
@@ -350,7 +357,7 @@ struct ScreenshotImportView: View {
         Task {
             do {
                 let ocr = try DocumentReader.read(fileAt: url)
-                let result = await ScreenshotExtractor.extract(from: ocr, forcing: forcedKindOverride)
+                let result = await ScreenshotExtractor.extract(from: ocr)
                 await MainActor.run { finish(with: result) }
             } catch {
                 await MainActor.run {
@@ -407,7 +414,6 @@ struct ScreenshotImportView: View {
             return
         }
 
-        lastImage = cgImage
         Task {
             let result = await ScreenshotExtractor.extract(from: cgImage, forcing: forcedKind)
             await MainActor.run { finish(with: result) }
@@ -433,12 +439,12 @@ struct ScreenshotImportView: View {
             }
             lastOCRText = outcome.ocrText
             lastLines = outcome.lines
+            lastOCR = OCRResult(lines: outcome.lines)
         case .failure(let error):
             errorText = error.localizedDescription
         }
     }
 
-    private var forcedKindOverride: ScreenshotKind? { nil }
 
     private func finishWithError(_ message: String) {
         isReading = false
@@ -564,10 +570,14 @@ struct ScreenshotImportView: View {
     }
 
     private func rereadAsAssignment() {
-        guard let image = lastImage else { return }
+        guard let ocr = lastOCR else { return }
         schedule = nil
-        let nsImage = NSImage(cgImage: image, size: .zero)
-        read(nsImage, forcing: .assignment)
+        isReading = true
+        errorText = nil
+        Task {
+            let result = await ScreenshotExtractor.extract(from: ocr, forcing: .assignment)
+            await MainActor.run { finish(with: result) }
+        }
     }
 
     private var headerSubtitle: String {
@@ -615,7 +625,9 @@ struct ScreenshotImportView: View {
                                 set: { schedule?.rows[index].name = $0; checkScheduleDuplicates() }
                             ))
                             .textFieldStyle(.plain)
+                            .labelsHidden()
                             .font(.system(size: 12, weight: .medium))
+                            .frame(maxWidth: .infinity, alignment: .leading)
 
                             if let match = scheduleDuplicates[row.id] {
                                 Text(match.confidence == .certain
@@ -643,7 +655,8 @@ struct ScreenshotImportView: View {
                                 set: { schedule?.rows[index].period = $0 }
                             ), format: .number)
                             .textFieldStyle(.roundedBorder)
-                            .frame(width: 38)
+                            .labelsHidden()
+                            .frame(width: 42)
                         }
 
                         Picker("", selection: Binding(

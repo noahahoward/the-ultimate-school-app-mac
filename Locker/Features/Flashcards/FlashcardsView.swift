@@ -34,7 +34,7 @@ struct FlashcardsView: View {
         .navigationTitle("Flashcards")
         .toolbar {
             ToolbarItem {
-                Button(action: addDeck) { Label("New deck", systemImage: "plus") }
+                Button("New Deck", action: addDeck)
             }
         }
         .sheet(item: $editingDeck) { DeckEditor(deck: $0).environmentObject(app) }

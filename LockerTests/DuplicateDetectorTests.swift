@@ -78,10 +78,11 @@ final class DuplicateDetectorTests: XCTestCase {
         XCTAssertEqual(match?.confidence, .certain)
     }
 
-    func testTheSameCourseInTheOtherSemesterIsNotADuplicate() {
-        // Biology I and Biology II are two classes that share a name.
-        let match = DuplicateDetector.schoolClass(name: "BIOLOGY", semester: 0, period: 3, among: classes)
-        XCTAssertNil(match)
+    func testEachSemestersCourseMatchesItsOwnHalf() {
+        // Biology I and Biology II share a name but are two classes, so an import
+        // has to land on the half it belongs to.
+        XCTAssertEqual(DuplicateDetector.schoolClass(name: "BIOLOGY", semester: 1, period: 3, among: classes)?.id, "c1")
+        XCTAssertEqual(DuplicateDetector.schoolClass(name: "BIOLOGY", semester: 2, period: 3, among: classes)?.id, "c2")
     }
 
     func testAShortenedNameIsFlaggedButNotAsCertain() {
@@ -111,5 +112,26 @@ final class DuplicateDetectorTests: XCTestCase {
         XCTAssertEqual(DuplicateDetector.tokenOverlap("cell membrane diagram",
                                                       "cell membrane diagram worksheet"), 1.0)
         XCTAssertEqual(DuplicateDetector.tokenOverlap("a b c d", "e f g h"), 0.0)
+    }
+}
+
+extension DuplicateDetectorTests {
+
+    func testAnAllYearClassClashesWithEitherSemester() {
+        // Importing "BIOLOGY, semester 1" when an all-year "Biology" is already
+        // set up is the same class arriving a second time.
+        let allYear = [DuplicateDetector.ClassCandidate(id: "c9", name: "Biology", semester: 0, period: 3)]
+        XCTAssertEqual(DuplicateDetector.schoolClass(name: "BIOLOGY", semester: 1, period: 3, among: allYear)?.id, "c9")
+        XCTAssertEqual(DuplicateDetector.schoolClass(name: "BIOLOGY", semester: 2, period: 3, among: allYear)?.id, "c9")
+    }
+
+    func testAnImportedAllYearClassClashesWithASemesterOne() {
+        let semesterOnly = [DuplicateDetector.ClassCandidate(id: "c8", name: "Biology", semester: 1, period: 3)]
+        XCTAssertNotNil(DuplicateDetector.schoolClass(name: "Biology", semester: 0, period: 3, among: semesterOnly))
+    }
+
+    func testTheTwoHalvesOfAYearLongCourseStillDoNotClash() {
+        let firstHalf = [DuplicateDetector.ClassCandidate(id: "c1", name: "BIOLOGY", semester: 1, period: 3)]
+        XCTAssertNil(DuplicateDetector.schoolClass(name: "BIOLOGY", semester: 2, period: 3, among: firstHalf))
     }
 }

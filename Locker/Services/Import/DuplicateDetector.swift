@@ -109,9 +109,12 @@ enum DuplicateDetector {
             let candidateKey = normalize(candidate.name)
             guard !candidateKey.isEmpty else { continue }
 
-            // A class only clashes within the same semester: the same course
-            // name in semester 1 and semester 2 is two different classes.
-            guard candidate.semester == semester else { continue }
+            // Semester 1 and semester 2 courses sharing a name are two different
+            // classes. A class that runs all year, though, overlaps both, so it
+            // clashes with either.
+            let sameTerm = candidate.semester == semester
+                || candidate.semester == 0 || semester == 0
+            guard sameTerm else { continue }
 
             if candidateKey == key {
                 return Match(id: candidate.id, confidence: .certain, reason: "Already in your classes")

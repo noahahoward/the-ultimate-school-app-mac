@@ -36,12 +36,16 @@ struct ClassesView: View {
         .navigationTitle("Classes")
         .toolbar {
             ToolbarItem {
-                Toggle("Show archived", isOn: $showArchived)
-                    .toggleStyle(.switch)
-                    .controlSize(.mini)
+                Menu {
+                    Toggle("Show archived classes", isOn: $showArchived)
+                } label: {
+                    Label("Options", systemImage: "ellipsis.circle")
+                }
             }
             ToolbarItem {
-                Button(action: addClass) { Label("Add class", systemImage: "plus") }
+                // Spelled out, because the window already has a "+" that adds
+                // work — two plus icons side by side say nothing about which.
+                Button("New Class", action: addClass)
             }
         }
         .sheet(item: $editing) { ClassEditor(schoolClass: $0).environmentObject(app) }

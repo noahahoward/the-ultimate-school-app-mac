@@ -94,6 +94,10 @@ struct ContentView: View {
             if ProcessInfo.processInfo.environment["LOCKER_OPEN"] == "import" {
                 app.activeSheet = .screenshotImport
             }
+            if let name = ProcessInfo.processInfo.environment["LOCKER_SECTION"],
+               let section = AppSection(rawValue: name) {
+                app.section = section
+            }
         }
         .onChange(of: app.settings.globalHotkeyEnabled) { _, _ in registerHotkey() }
     }
