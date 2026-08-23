@@ -9,8 +9,6 @@ struct OnboardingView: View {
 
     @State private var step = 0
     @State private var newClassName = ""
-    @State private var isConnecting = false
-    @State private var connectError: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,7 +37,7 @@ struct OnboardingView: View {
                 .foregroundStyle(Theme.accent)
             Text("Locker")
                 .font(Theme.display(30, weight: .bold))
-            Text("Everything due, all in one place.\nAdd work by typing it, and Locker figures out the class and the date.")
+            Text("Everything due, all in one place.\nPoint Locker at the page your work is on and it reads the rest.")
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -91,10 +89,37 @@ struct OnboardingView: View {
 
     private var classesStep: some View {
         VStack(alignment: .leading, spacing: 14) {
-            stepHeader("Add your classes", "Names are enough for now — times and colors can come later.")
+            stepHeader("Add your classes",
+                       "Fastest is to let Locker read your timetable. You can always correct it after.")
 
-            HStack(spacing: 8) {
-                TextField("Class name", text: $newClassName)
+            VStack(spacing: 8) {
+                if BrowserTabs.anyBrowserRunning {
+                    Button {
+                        startImport(.browserPage)
+                    } label: {
+                        onboardingAction("Read my timetable from a browser page",
+                                         "Open it in a tab and Locker reads it straight off",
+                                         "doc.text.magnifyingglass")
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Button {
+                    startImport(nil)
+                } label: {
+                    onboardingAction("Read it from a screenshot",
+                                     "Pick a window, or choose a picture or PDF",
+                                     "camera.viewfinder")
+                }
+                .buttonStyle(.plain)
+            }
+
+            Divider()
+
+            Text("Or type them in")
+                .font(.system(size: 12, weight: .medium))
+
+            HStack(spacing: 8) {                TextField("Class name", text: $newClassName)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit(addClass)
                 Button("Add", action: addClass)
@@ -129,29 +154,50 @@ struct OnboardingView: View {
                 .frame(maxHeight: 150)
             }
 
-            Divider()
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Or pull them from Google Classroom")
-                    .font(.system(size: 12, weight: .medium))
-                Text("Needs a one-time setup in Google Cloud Console. You can do this later in Settings.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                if let connectError {
-                    Text(connectError)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.overdue)
-                }
-                Button(isConnecting ? "Connecting…" : "Set up Google Classroom") {
-                    app.section = .today
-                    finish()
-                }
-                .disabled(isConnecting)
-            }
-
             Spacer()
         }
         .padding(30)
+    }
+
+    /// One of the ways in, drawn as a row rather than a plain button so the
+    /// choice reads at a glance.
+    private func onboardingAction(_ title: String, _ subtitle: String, _ symbol: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: 15))
+                .foregroundStyle(Theme.accent)
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.system(size: 13, weight: .medium))
+                Text(subtitle).font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Theme.accent.opacity(0.08))
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    /// Leaves onboarding and opens the importer.
+    ///
+    /// Both live in the one sheet slot, so the first has to be gone before the
+    /// second is asked for, or they fight over it.
+    private func startImport(_ entry: ImportEntry?) {
+        app.settings.hasCompletedOnboarding = true
+        app.importEntry = entry
+        app.save()
+        dismiss()
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            app.activeSheet = .screenshotImport
+        }
     }
 
     private func stepHeader(_ title: String, _ subtitle: String) -> some View {

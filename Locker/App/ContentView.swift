@@ -38,40 +38,26 @@ struct ContentView: View {
         } detail: {
             detail
                 .toolbar {
-                    if BrowserTabs.anyBrowserRunning {
-                        ToolbarItem(placement: .primaryAction) {
-                            Button {
-                                app.importEntry = .browserPage
-                                app.activeSheet = .screenshotImport
-                            } label: {
-                                Label("Read a browser page", systemImage: "doc.text.magnifyingglass")
-                            }
-                            .keyboardShortcut("r", modifiers: [.command, .option])
-                            .help("Read your classes straight from a browser page (⌥⌘R)")
-                        }
-                    }
                     ToolbarItem(placement: .primaryAction) {
-                        // Pressing it reads a screenshot, which is how most work
-                        // gets in. The rest of the ways are a chevron away.
+                        // Pressing it reads the page the work is on, which needs
+                        // nothing but a tab. The rest are a chevron away.
                         Menu {
+                            if BrowserTabs.anyBrowserRunning {
+                                Button("Read a browser page…") { app.readBrowserPage() }
+                                    .keyboardShortcut("r", modifiers: [.command, .option])
+                            }
                             Button("From a screenshot…") { app.activeSheet = .screenshotImport }
                                 .keyboardShortcut("i", modifiers: [.command, .shift])
-                            if BrowserTabs.anyBrowserRunning {
-                                Button("Read a browser page…") {
-                                    app.importEntry = .browserPage
-                                    app.activeSheet = .screenshotImport
-                                }
-                                .keyboardShortcut("r", modifiers: [.command, .option])
-                            }
                             Divider()
                             Button("Type it in…") { app.presentQuickAdd() }
                                 .keyboardShortcut("n", modifiers: .command)
                         } label: {
                             Label("Add", systemImage: "plus")
                         } primaryAction: {
-                            app.activeSheet = .screenshotImport
+                            if BrowserTabs.anyBrowserRunning { app.readBrowserPage() }
+                            else { app.activeSheet = .screenshotImport }
                         }
-                        .help("Add work — press to read a screenshot, or pick another way")
+                        .help("Add work — press to read a browser page, or pick another way")
                     }
                 }
         }

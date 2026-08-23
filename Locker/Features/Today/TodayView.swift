@@ -142,16 +142,49 @@ struct TodayView: View {
     private var quickAddField: some View {
         Panel(padding: 12) {
             VStack(spacing: 10) {
-                HStack(spacing: 10) {
+                HStack(spacing: 8) {
+                    let canReadPage = BrowserTabs.anyBrowserRunning
                     Button {
-                        app.activeSheet = .screenshotImport
+                        if canReadPage { app.readBrowserPage() }
+                        else { app.activeSheet = .screenshotImport }
                     } label: {
-                        Label("Add from a screenshot", systemImage: "camera.viewfinder")
+                        Label(canReadPage ? "Read a browser page" : "Add from a screenshot",
+                              systemImage: canReadPage ? "doc.text.magnifyingglass" : "camera.viewfinder")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
+                            .padding(.vertical, 9)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(Theme.accent)
+                            )
+                            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .help("Capture an assignment or your schedule (⇧⌘I)")
+                    // The system's prominent style drains to grey whenever the
+                    // window is not the front one, which is exactly when this
+                    // needs to look like the thing to press.
+                    .buttonStyle(.plain)
+                    .help(canReadPage
+                          ? "Read your work straight off a page you have open (⌥⌘R)"
+                          : "Capture an assignment or your schedule (⇧⌘I)")
+
+                    if canReadPage {
+                        Button {
+                            app.activeSheet = .screenshotImport
+                        } label: {
+                            Image(systemName: "camera.viewfinder")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(Theme.accent)
+                                .frame(width: 38, height: 34)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(Theme.accent.opacity(0.12))
+                                )
+                                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .help("Add from a screenshot instead (⇧⌘I)")
+                    }
                 }
 
                 HStack(spacing: 10) {

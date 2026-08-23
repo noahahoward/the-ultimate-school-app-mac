@@ -136,6 +136,12 @@ final class AppState: ObservableObject {
 
     // MARK: - Quick add
 
+    /// Opens the importer straight on the browser-page reader.
+    func readBrowserPage() {
+        importEntry = .browserPage
+        activeSheet = .screenshotImport
+    }
+
     func presentQuickAdd(seed: String = "") {
         quickAddSeedText = seed
         activeSheet = .quickAdd
