@@ -75,7 +75,16 @@ enum BrowserDOM {
         guard let kind = BrowserTabs.Kind(bundleIdentifier: window.bundleIdentifier) else {
             throw Failure.notABrowser
         }
-        if let tab { await BrowserTabs.focus(tab, in: window) }
+        return try await read(kind, tab: tab)
+    }
+
+    /// Reads a tab directly. Nothing here touches the screen, so this path asks
+    /// for no recording permission at all.
+    static func read(_ kind: BrowserTabs.Kind, tab: BrowserTab?) async throws -> PageContent {
+        if let tab {
+            await BrowserTabs.focus(tab, in: kind)
+            try? await Task.sleep(nanoseconds: 350_000_000)
+        }
 
         let source = appleScript(for: kind)
         let result = await BrowserTabs.runScript(source)

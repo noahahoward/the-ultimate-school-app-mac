@@ -17,7 +17,9 @@ struct BrowserTab: Identifiable, Hashable, Sendable {
 /// capture just uses the tab already open.
 enum BrowserTabs {
 
-    enum Kind: Sendable {
+    enum Kind: Sendable, Hashable, Identifiable {
+        var id: String { applicationName }
+
         case safari
         case chromium(name: String)
 
@@ -58,8 +60,27 @@ enum BrowserTabs {
     /// permission dialog on screen, and Locker must not sit frozen behind it.
     static let timeout: TimeInterval = 4
 
+    /// Every browser Locker can read that is currently open.
+    ///
+    /// Found through running applications and asked about over AppleScript, so
+    /// none of this needs permission to record the screen — reading a page never
+    /// looks at a single pixel.
+    static func runningBrowsers() -> [Kind] {
+        var found: [Kind] = []
+        for app in NSWorkspace.shared.runningApplications {
+            guard let kind = Kind(bundleIdentifier: app.bundleIdentifier) else { continue }
+            guard !found.contains(where: { $0.applicationName == kind.applicationName }) else { continue }
+            found.append(kind)
+        }
+        return found
+    }
+
     static func tabs(for window: CapturableWindow) async -> [BrowserTab] {
         guard let kind = Kind(bundleIdentifier: window.bundleIdentifier) else { return [] }
+        return await tabs(for: kind)
+    }
+
+    static func tabs(for kind: Kind) async -> [BrowserTab] {
         let script = listScript(kind)
         guard let output = await run(script) else { return [] }
 
@@ -79,7 +100,12 @@ enum BrowserTabs {
     @discardableResult
     static func focus(_ tab: BrowserTab, in window: CapturableWindow) async -> Bool {
         guard let kind = Kind(bundleIdentifier: window.bundleIdentifier) else { return false }
-        return await run(focusScript(kind, tab: tab)) != nil
+        return await focus(tab, in: kind)
+    }
+
+    @discardableResult
+    static func focus(_ tab: BrowserTab, in kind: Kind) async -> Bool {
+        await run(focusScript(kind, tab: tab)) != nil
     }
 
     // MARK: - Scripts

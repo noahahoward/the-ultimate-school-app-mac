@@ -34,6 +34,7 @@ struct ScreenshotImportView: View {
     @State private var assignmentDuplicates: [UUID: DuplicateDetector.Match] = [:]
     @State private var readPageURL = ""
     @State private var isChoosingWindow = false
+    @State private var isChoosingPage = false
     @State private var readingMessage = "Reading…"
 
     // Editable copies, so a misread can be corrected before saving.
@@ -66,6 +67,25 @@ struct ScreenshotImportView: View {
             footer
         }
         .frame(width: 520, height: 620)
+        .sheet(isPresented: $isChoosingPage) {
+            BrowserPageChooserView(
+                onClasses: { classes in
+                    isChoosingPage = false
+                    engine = .page
+                    schedule = ScheduleDraft(rows: classes)
+                    checkScheduleDuplicates()
+                },
+                onAssignments: { work, pageURL in
+                    isChoosingPage = false
+                    engine = .page
+                    readPageURL = pageURL
+                    assignments = work
+                    checkAssignmentDuplicates()
+                },
+                onCancel: { isChoosingPage = false }
+            )
+            .frame(width: 460, height: 420)
+        }
         .sheet(isPresented: $isChoosingWindow) {
             WindowChooserView(
                 onCapture: { image in
@@ -136,7 +156,7 @@ struct ScreenshotImportView: View {
                     // to get names the page cuts short, and it was too easy to
                     // miss one level down.
                     if BrowserTabs.anyBrowserRunning {
-                        Button { isChoosingWindow = true } label: {
+                        Button { isChoosingPage = true } label: {
                             Label("Read a browser page", systemImage: "doc.text.magnifyingglass")
                                 .frame(maxWidth: .infinity)
                         }
@@ -206,8 +226,12 @@ struct ScreenshotImportView: View {
             // Dev affordance, same shape as LOCKER_SEED: read a given file on
             // open so the review screens can be checked without clicking through.
             if app.importEntry == .browserPage
-                || ProcessInfo.processInfo.environment["LOCKER_OPEN"] == "windows" {
+                || ProcessInfo.processInfo.environment["LOCKER_OPEN"] == "page" {
                 app.importEntry = nil
+                isChoosingPage = true
+                return
+            }
+            if ProcessInfo.processInfo.environment["LOCKER_OPEN"] == "windows" {
                 isChoosingWindow = true
                 return
             }
