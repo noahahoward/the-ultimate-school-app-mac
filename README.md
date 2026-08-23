@@ -77,6 +77,11 @@ Press **Add from a screenshot** (⇧⌘I), then:
   directly. Nothing is captured until you pick, so you can get the page exactly
   right first. For a browser it also lists the tabs, and switches to the one you
   choose before capturing.
+- **Read the page** — for a browser window, Locker can ask the page itself
+  instead of photographing it. Class names come through whole rather than clipped
+  to fit, and each class keeps the link it came from. Needs one switch in the
+  browser: **View › Developer › Allow JavaScript from Apple Events**. Without it,
+  capturing still works.
 - **Select an area** — the familiar crosshair, for part of a screen. Locker hides
   itself first. Note the crosshair swallows clicks, so set the page up beforehand.
 - **Choose a file** — images, PDFs, and text files.

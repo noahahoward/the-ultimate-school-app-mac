@@ -15,12 +15,14 @@ enum ExtractionEngine: String, Sendable {
     case model = "on-device model"
     case labels = "label matching"
     case table = "table layout"
+    case page = "the page itself"
 
     var explanation: String {
         switch self {
         case .model: "Read on this Mac by Apple's on-device model. Nothing was uploaded."
         case .labels: "Read by matching labels in the screenshot. No model was used."
         case .table: "Read from the table layout. No model was used — check the columns below."
+        case .page: "Read from the page itself, so nothing was cut short. Nothing was uploaded."
         }
     }
 }

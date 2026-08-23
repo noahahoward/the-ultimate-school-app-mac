@@ -66,6 +66,12 @@ struct ScreenshotImportView: View {
                     isChoosingWindow = false
                     read(NSImage(cgImage: image, size: .zero))
                 },
+                onClasses: { classes in
+                    isChoosingWindow = false
+                    engine = .page
+                    schedule = ScheduleDraft(rows: classes)
+                    checkScheduleDuplicates()
+                },
                 onCancel: { isChoosingWindow = false }
             )
             .frame(width: 480, height: 460)

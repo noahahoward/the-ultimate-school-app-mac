@@ -4,6 +4,9 @@ import AppKit
 /// Pick a window to capture, and a tab if it's a browser.
 struct WindowChooserView: View {
     var onCapture: (CGImage) -> Void
+    /// Classes read straight from a browser page, which keeps names the screen
+    /// would have clipped.
+    var onClasses: ([ClassDraft]) -> Void
     var onCancel: () -> Void
 
     @State private var windows: [CapturableWindow] = []
@@ -12,6 +15,7 @@ struct WindowChooserView: View {
     @State private var selectedTab: BrowserTab?
     @State private var isLoading = true
     @State private var isCapturing = false
+    @State private var isReadingPage = false
     @State private var isLoadingTabs = false
     @State private var errorText: String?
 
@@ -118,9 +122,14 @@ struct WindowChooserView: View {
                 .disabled(isLoading || isCapturing)
             Spacer()
             Button("Cancel", action: onCancel)
+            if selected?.isBrowser == true {
+                Button(isReadingPage ? "Reading…" : "Read the page") { Task { await readPage() } }
+                    .disabled(isReadingPage || isCapturing)
+                    .help("Reads the page itself, so long class names aren't cut short")
+            }
             Button(isCapturing ? "Capturing…" : "Capture") { Task { await capture() } }
                 .buttonStyle(.borderedProminent)
-                .disabled(selected == nil || isCapturing)
+                .disabled(selected == nil || isCapturing || isReadingPage)
                 .keyboardShortcut(.defaultAction)
         }
         .padding(12)
@@ -173,6 +182,28 @@ struct WindowChooserView: View {
         tabs = found
         selectedTab = found.first
         isLoadingTabs = false
+    }
+
+    /// Asks the browser for the page instead of photographing it.
+    private func readPage() async {
+        guard let window = selected else { return }
+        isReadingPage = true
+        errorText = nil
+
+        do {
+            let page = try await BrowserDOM.read(window, tab: selectedTab)
+            let classes = DOMClassReader.classes(from: page)
+            isReadingPage = false
+
+            guard !classes.isEmpty else {
+                errorText = "No classes were found on that page. Try Capture instead, or open the page listing the classes."
+                return
+            }
+            onClasses(classes)
+        } catch {
+            isReadingPage = false
+            errorText = error.localizedDescription
+        }
     }
 
     private func capture() async {

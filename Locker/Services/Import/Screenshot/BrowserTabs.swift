@@ -121,6 +121,51 @@ enum BrowserTabs {
         }
     }
 
+    enum ScriptResult: Sendable {
+        case success(String)
+        case failure(String)
+    }
+
+    /// Like `run`, but keeps the browser's complaint, which is how a disabled
+    /// "Allow JavaScript from Apple Events" is told apart from an empty page.
+    static func runScript(_ source: String) async -> ScriptResult {
+        await withCheckedContinuation { continuation in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            process.arguments = ["-e", source]
+
+            let output = Pipe()
+            let errors = Pipe()
+            process.standardOutput = output
+            process.standardError = errors
+
+            var finished = false
+            let lock = NSLock()
+            func settle(_ value: ScriptResult) {
+                lock.lock(); defer { lock.unlock() }
+                guard !finished else { return }
+                finished = true
+                continuation.resume(returning: value)
+            }
+
+            process.terminationHandler = { proc in
+                let out = String(data: output.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+                let err = String(data: errors.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+                settle(proc.terminationStatus == 0 ? .success(out) : .failure(err))
+            }
+
+            do { try process.run() } catch {
+                settle(.failure("Couldn't ask the browser."))
+                return
+            }
+
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout * 2) {
+                if process.isRunning { process.terminate() }
+                settle(.failure("The browser didn't answer."))
+            }
+        }
+    }
+
     /// Runs AppleScript out of process with a deadline, so a permission dialog or
     /// a wedged browser can never freeze Locker.
     private static func run(_ source: String) async -> String? {
