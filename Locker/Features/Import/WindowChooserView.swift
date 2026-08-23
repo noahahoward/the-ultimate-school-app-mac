@@ -72,16 +72,31 @@ struct WindowChooserView: View {
                 Button("Look again") { Task { await load() } }.controlSize(.small)
             }
         } else {
-            List(selection: selectionBinding) {
-                ForEach(grouped, id: \.app) { group in
-                    Section(group.app) {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(grouped, id: \.app) { group in
+                        Text(group.app)
+                            .font(Theme.eyebrow)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 12)
+                            .padding(.top, 10)
+                            .padding(.bottom, 4)
+
                         ForEach(group.windows) { window in
-                            row(window).tag(window.id)
+                            Button { select(window) } label: {
+                                row(window)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
+                                    .background(selected?.id == window.id
+                                                ? Theme.accent.opacity(0.14) : Color.clear)
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
             }
-            .listStyle(.inset)
         }
     }
 
@@ -150,16 +165,11 @@ struct WindowChooserView: View {
             .sorted { $0.app.localizedCaseInsensitiveCompare($1.app) == .orderedAscending }
     }
 
-    private var selectionBinding: Binding<CGWindowID?> {
-        Binding(
-            get: { selected?.id },
-            set: { id in
-                selected = windows.first { $0.id == id }
-                tabs = []
-                selectedTab = nil
-                if let selected, selected.isBrowser { Task { await loadTabs(for: selected) } }
-            }
-        )
+    private func select(_ window: CapturableWindow) {
+        selected = window
+        tabs = []
+        selectedTab = nil
+        if window.isBrowser { Task { await loadTabs(for: window) } }
     }
 
     private func load() async {

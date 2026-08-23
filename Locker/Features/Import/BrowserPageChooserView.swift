@@ -75,15 +75,36 @@ struct BrowserPageChooserView: View {
                     .padding(10)
                 }
 
-                List(selection: $selected) {
-                    ForEach(tabs) { tab in
-                        Text(tab.title)
-                            .font(.system(size: 12))
-                            .lineLimit(1)
-                            .tag(tab as BrowserTab?)
+                // Rows are buttons rather than List selection: a List keyed on
+                // Identifiable rows selects by id, so a binding to the item
+                // itself silently never updates and clicking appears to do
+                // nothing at all.
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(tabs) { tab in
+                            Button { selected = tab } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: selected?.id == tab.id
+                                          ? "largecircle.fill.circle" : "circle")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(selected?.id == tab.id ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(.tertiary))
+                                    Text(tab.title)
+                                        .font(.system(size: 12))
+                                        .lineLimit(1)
+                                    Spacer(minLength: 0)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
+                                .contentShape(Rectangle())
+                                .background(selected?.id == tab.id
+                                            ? Theme.accent.opacity(0.14) : Color.clear)
+                            }
+                            .buttonStyle(.plain)
+
+                            Divider().padding(.leading, 32)
+                        }
                     }
                 }
-                .listStyle(.inset)
             }
         }
     }
