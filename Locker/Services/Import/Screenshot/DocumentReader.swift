@@ -49,18 +49,35 @@ enum DocumentReader {
     static func readPDF(_ url: URL) throws -> OCRResult {
         guard let document = PDFDocument(url: url), document.pageCount > 0 else { throw Failure.unreadable }
 
-        var lines: [OCRLine] = []
         let pageCount = min(document.pageCount, 10)
+        var pages: [[OCRLine]] = []
 
         for index in 0..<pageCount {
             guard let page = document.page(at: index) else { continue }
             guard let image = render(page) else { continue }
             guard let pageResult = try? ScreenshotOCR.read(image) else { continue }
+            pages.append(pageResult.lines)
+        }
 
-            // Stack pages vertically so the first page reads before the second.
-            let span = 1.0 / CGFloat(pageCount)
-            let offset = CGFloat(pageCount - 1 - index) * span
-            lines.append(contentsOf: pageResult.lines.map { line in
+        let lines = stack(pages)
+        guard !lines.isEmpty else { throw Failure.empty }
+        return OCRResult(lines: lines)
+    }
+
+    /// Lays pages out one above the next in a single coordinate space.
+    ///
+    /// Each page arrives already in reading order and is appended in that order,
+    /// deliberately without a second global sort. Squeezing ten pages into one
+    /// unit square puts neighbouring lines closer together than the sort's fixed
+    /// threshold, and it would start reading across a page instead of down it.
+    static func stack(_ pages: [[OCRLine]]) -> [OCRLine] {
+        let filled = pages.filter { !$0.isEmpty }
+        guard !filled.isEmpty else { return [] }
+
+        let span = 1.0 / CGFloat(filled.count)
+        return filled.enumerated().flatMap { index, page -> [OCRLine] in
+            let offset = CGFloat(filled.count - 1 - index) * span
+            return page.map { line in
                 var moved = line
                 moved.box = CGRect(
                     x: line.box.minX,
@@ -69,11 +86,8 @@ enum DocumentReader {
                     height: line.box.height * span
                 )
                 return moved
-            })
+            }
         }
-
-        guard !lines.isEmpty else { throw Failure.empty }
-        return OCRResult(lines: ScreenshotOCR.readingOrder(lines))
     }
 
     private static func render(_ page: PDFPage, scale: CGFloat = 2) -> CGImage? {
