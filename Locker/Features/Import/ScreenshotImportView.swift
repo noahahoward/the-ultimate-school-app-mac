@@ -356,7 +356,10 @@ struct ScreenshotImportView: View {
             Spacer()
             Button("Cancel") { dismiss() }
             if schedule != nil {
-                Button("Add \(selectedRowCount) class\(selectedRowCount == 1 ? "" : "es")", action: saveSchedule)
+                Button(selectedRowCount == 0
+                       ? "Nothing to add"
+                       : "Add \(selectedRowCount) class\(selectedRowCount == 1 ? "" : "es")",
+                       action: saveSchedule)
                     .buttonStyle(.borderedProminent)
                     .disabled(selectedRowCount == 0)
                     .keyboardShortcut(.defaultAction)
@@ -641,6 +644,14 @@ struct ScreenshotImportView: View {
         schedule?.rows.filter(\.include).count ?? 0
     }
 
+    /// Every row already exists, which is what re-reading the same page looks
+    /// like. Worth saying outright: an "Add 0 classes" button that cannot be
+    /// pressed reads as a broken one.
+    private var everythingIsADuplicate: Bool {
+        guard let schedule, !schedule.rows.isEmpty else { return false }
+        return schedule.rows.allSatisfy { scheduleDuplicates[$0.id] != nil }
+    }
+
     private var hasSemesterRows: Bool {
         schedule?.rows.contains { $0.semester != 0 } ?? false
     }
@@ -725,7 +736,9 @@ struct ScreenshotImportView: View {
                 }
             } header: {
                 HStack {
-                    Text("Classes found")
+                    Text(everythingIsADuplicate
+                         ? "All of these are already in your classes"
+                         : "Classes found")
                     Spacer()
                     Button(selectedRowCount == found.rows.count ? "Deselect all" : "Select all") {
                         let turnOn = selectedRowCount != found.rows.count
@@ -737,9 +750,11 @@ struct ScreenshotImportView: View {
                     .font(.system(size: 11))
                 }
             } footer: {
-                Text("Each line shows the text it came from. Names and periods can be edited here, and days and times can be set afterwards in Classes.")
+                Text(everythingIsADuplicate
+                     ? "Nothing new was found on that page — every class is already set up. Tick one to add a second copy of it."
+                     : "Each line shows the text it came from. Names and periods can be edited here, and days and times can be set afterwards in Classes.")
                     .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(everythingIsADuplicate ? Theme.highlighterDeep : .secondary)
             }
 
             if let table = found.table, found.isColumnMapped {

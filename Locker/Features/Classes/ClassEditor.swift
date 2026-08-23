@@ -147,6 +147,17 @@ struct ClassEditor: View {
     }
 
     private func commit() {
+        // "New Class" inserts the row before it is filled in, so closing the
+        // editor without typing anything would leave a nameless class sitting
+        // in the list forever.
+        if schoolClass.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           schoolClass.assignments.isEmpty {
+            app.context.delete(schoolClass)
+            app.save()
+            dismiss()
+            return
+        }
+
         schoolClass.aliases = aliasText
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
