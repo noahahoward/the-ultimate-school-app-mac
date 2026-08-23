@@ -74,7 +74,7 @@ enum DOMAssignmentReader {
         draft.title = title
         draft.className = className(in: lines, excluding: title)
 
-        if let due = lines.compactMap({ FieldParsing.dateAndTime(from: $0, now: now, calendar: calendar) }).first {
+        if let due = dueDate(in: lines, now: now, calendar: calendar) {
             draft.dueAt = due.date
             draft.hasDueTime = due.hasTime
         }
@@ -103,12 +103,33 @@ enum DOMAssignmentReader {
     }
 
     /// Labels and controls that sit inside an item without describing it.
+    /// A date on the page is only a deadline when nothing says otherwise. Work
+    /// handed out with nothing to turn in still carries the day it was posted,
+    /// and reading that as a due date makes it look months overdue.
+    static func dueDate(in lines: [String], now: Date, calendar: Calendar)
+        -> (date: Date, hasTime: Bool)? {
+        for (index, line) in lines.enumerated() {
+            guard let found = FieldParsing.dateAndTime(from: line, now: now, calendar: calendar)
+            else { continue }
+            if namesAPosting(line) { continue }
+            if index > 0, namesAPosting(lines[index - 1]) { continue }
+            return found
+        }
+        return nil
+    }
+
+    private static func namesAPosting(_ line: String) -> Bool {
+        let lower = line.lowercased()
+        return ["posted", "assigned", "created", "edited", "updated"]
+            .contains { lower.hasPrefix($0) }
+    }
+
     static func isFurniture(_ line: String) -> Bool {
         let lower = line.lowercased()
         let exact: Set<String> = [
             "assignment", "material", "quiz assignment", "question", "class",
             "learn with gemini", "view details", "more options", "more_vert",
-            "assigned", "turned in", "done", "missing", "no due date",
+            "assigned", "posted", "turned in", "done", "missing", "no due date",
         ]
         if exact.contains(lower) { return true }
         if lower.hasPrefix("open ") || lower.hasPrefix("view ") { return true }

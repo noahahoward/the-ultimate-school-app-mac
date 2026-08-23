@@ -152,4 +152,36 @@ final class DOMAssignmentReaderTests: XCTestCase {
         XCTAssertEqual(SavedPage.suggestedName(for: "https://classroom.google.com/u/2/a/not-turned-in/all",
                                                title: "To-do - Classroom"), "To-do")
     }
+
+    func testHandOutDateIsNotADeadline() throws {
+        let lines = ["assignment", "Map Drills", "Summer Geography 2026", "Posted", "Thursday, Jun 11"]
+        let now = try XCTUnwrap(date(2026, 8, 23))
+        XCTAssertNil(DOMAssignmentReader.dueDate(in: lines, now: now, calendar: .current))
+    }
+
+    func testPostedOnOneLineWithItsDateIsNotADeadline() throws {
+        let now = try XCTUnwrap(date(2026, 8, 23))
+        XCTAssertNil(DOMAssignmentReader.dueDate(in: ["Reading List", "Posted Jun 11"],
+                                                 now: now, calendar: .current))
+    }
+
+    func testARealDeadlineIsStillRead() throws {
+        let lines = ["assignment", "Chapter One", "Honors ELA", "Wed, Aug 26, 11:59 PM"]
+        let now = try XCTUnwrap(date(2026, 8, 23))
+        let due = try XCTUnwrap(DOMAssignmentReader.dueDate(in: lines, now: now, calendar: .current))
+        XCTAssertTrue(due.hasTime)
+    }
+
+    func testPostingDateIsSkippedInFavourOfTheDeadlineBelowIt() throws {
+        let lines = ["Essay", "Posted", "Jun 11", "Due", "Fri, Sep 4"]
+        let now = try XCTUnwrap(date(2026, 8, 23))
+        let due = try XCTUnwrap(DOMAssignmentReader.dueDate(in: lines, now: now, calendar: .current))
+        let parts = Calendar.current.dateComponents([.month, .day], from: due.date)
+        XCTAssertEqual(parts.month, 9)
+        XCTAssertEqual(parts.day, 4)
+    }
+
+    private func date(_ year: Int, _ month: Int, _ day: Int) -> Date? {
+        Calendar.current.date(from: DateComponents(year: year, month: month, day: day))
+    }
 }
