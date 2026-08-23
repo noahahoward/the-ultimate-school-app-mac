@@ -26,9 +26,7 @@ struct ClassesView: View {
                         )
                     }
                 } else {
-                    ForEach(visible) { schoolClass in
-                        classCard(schoolClass)
-                    }
+                    arranged
                 }
             }
             .padding(Theme.gutter)
@@ -81,6 +79,107 @@ struct ClassesView: View {
                 app.selectedClassID = nil
             }
         }
+    }
+
+    // MARK: - Arrangement
+
+    /// Period order within a semester, which is the order the day happens in.
+    private func inOrder(_ group: [SchoolClass]) -> [SchoolClass] {
+        group.sorted {
+            ($0.period ?? 99, $0.name.lowercased()) < ($1.period ?? 99, $1.name.lowercased())
+        }
+    }
+
+    private func semesterLabel(_ semester: Int) -> String {
+        switch semester {
+        case 1: "Semester 1"
+        case 2: "Semester 2"
+        default: "All year"
+        }
+    }
+
+    /// Term is the outer grouping and letter days sit inside it, because a
+    /// school can run both: two timetables a year, each alternating A and B.
+    /// Treating them as alternatives hid whichever one came second.
+    @ViewBuilder
+    private var arranged: some View {
+        let semesters = Set(visible.map(\.semester)).sorted()
+        if semesters == [0] {
+            group(visible, heading: nil)
+        } else {
+            ForEach(semesters, id: \.self) { semester in
+                let inTerm = visible.filter { $0.semester == semester }
+                if !inTerm.isEmpty {
+                    group(inTerm, heading: semesterLabel(semester))
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func group(_ inTerm: [SchoolClass], heading: String?) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let heading {
+                SectionHeading(title: heading, count: inTerm.count)
+            }
+
+            if app.settings.scheduleKind == .alternatingAB {
+                let everyDay = inOrder(inTerm.filter { $0.abDesignation == .both })
+                ForEach(everyDay) { classCard($0) }
+
+                HStack(alignment: .top, spacing: Theme.gutter) {
+                    dayColumn(.a, in: inTerm)
+                    dayColumn(.b, in: inTerm)
+                }
+            } else {
+                ForEach(inOrder(inTerm)) { classCard($0) }
+            }
+        }
+    }
+
+    private func dayColumn(_ designation: ABDesignation, in inTerm: [SchoolClass]) -> some View {
+        let group = inOrder(inTerm.filter { $0.abDesignation == designation })
+        let letter = designation == .a ? "A" : "B"
+
+        return VStack(alignment: .leading, spacing: 8) {
+            SectionHeading(title: "\(letter) days", count: group.count, accent: Theme.accent)
+
+            ForEach(group) { classCard($0) }
+
+            if group.isEmpty {
+                Text("Drag a class here to put it on \(letter) days.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 18)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: Theme.cardCorner, style: .continuous)
+                .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                .foregroundStyle(Color.primary.opacity(0.12))
+        )
+        .dropDestination(for: String.self) { ids, _ in
+            move(ids, to: designation)
+        }
+    }
+
+    /// Dropping a class into a column is how its day gets set when the schedule
+    /// itself didn't say.
+    private func move(_ ids: [String], to designation: ABDesignation) -> Bool {
+        var moved = false
+        for id in ids {
+            guard let schoolClass = classes.first(where: { $0.idString == id }) else { continue }
+            schoolClass.abDesignation = designation
+            moved = true
+        }
+        if moved {
+            app.save()
+            Task { await app.rescheduleReminders() }
+        }
+        return moved
     }
 
     private func addClass() {
@@ -146,7 +245,17 @@ struct ClassesView: View {
             .contentShape(Rectangle())
             .onTapGesture { editing = schoolClass }
         }
+        .draggable(schoolClass.idString)
         .contextMenu {
+            if app.settings.scheduleKind == .alternatingAB {
+                Picker("Meets on", selection: Binding(
+                    get: { schoolClass.abDesignation },
+                    set: { schoolClass.abDesignation = $0; app.save() }
+                )) {
+                    ForEach(ABDesignation.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                Divider()
+            }
             Button("Edit") { editing = schoolClass }
             Button(schoolClass.isArchived ? "Unarchive" : "Archive") {
                 schoolClass.isArchived.toggle()
