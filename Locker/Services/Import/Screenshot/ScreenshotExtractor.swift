@@ -83,12 +83,19 @@ enum ScreenshotExtractor {
         do {
             if kind == .assignment { return .success(try await assignmentOutcome(ocr: ocr, now: now)) }
 
-            // Familiar layouts print one detail line per class ("Period 3 -
-            // SEMESTER 1"), which needs no model at all.
+            // Two deterministic readers, for the two shapes a class list takes:
+            // a row per class with a detail line ("Period 3 - SEMESTER 1"), or a
+            // card per class on a dashboard. Both are cheap, so both run and the
+            // fuller answer wins — a page of cards still contains the odd
+            // "Per 4" line, and letting that decide would find two classes out
+            // of six.
             let patternRows = ScheduleParsing.rows(from: ocr)
-            if patternRows.count >= 2 {
+            let cardRows = CardReader.classes(from: ocr)
+            let deterministic = cardRows.count > patternRows.count ? cardRows : patternRows
+
+            if deterministic.count >= 2 {
                 return .success(ExtractionOutcome(
-                    content: .schedule(ScheduleDraft(rows: patternRows)),
+                    content: .schedule(ScheduleDraft(rows: deterministic)),
                     engine: .labels,
                     ocrText: ocr.text, lines: ocr.lines
                 ))
