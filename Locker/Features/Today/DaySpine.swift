@@ -177,6 +177,20 @@ struct DaySpine: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { onSelectClass(schoolClass) }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(spokenDescription(schoolClass))
+        .accessibilityAddTraits(.isButton)
+    }
+
+    /// What the block conveys visually — when it is, and what is due — said out loud.
+    private func spokenDescription(_ schoolClass: SchoolClass) -> String {
+        var parts = [schoolClass.name]
+        if let range = schoolClass.timeRangeText { parts.append(range) }
+        if let period = schoolClass.period { parts.append("period \(period)") }
+        if let due = dueCountByClassID[schoolClass.idString], due > 0 {
+            parts.append("\(due) due")
+        }
+        return parts.joined(separator: ", ")
     }
 
     private func classBody(_ schoolClass: SchoolClass, isCurrent: Bool, color: Color) -> some View {

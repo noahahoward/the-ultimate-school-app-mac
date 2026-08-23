@@ -53,6 +53,9 @@ struct ClassDot: View {
         Circle()
             .fill(Theme.classColor(hex))
             .frame(width: size, height: size)
+            // The dot only means anything alongside the class name it sits next
+            // to, so on its own it is decoration.
+            .accessibilityHidden(true)
     }
 }
 
@@ -129,6 +132,9 @@ struct CompletionToggle: View {
         }
         .buttonStyle(.plain)
         .help(isDone ? "Mark as not done" : "Mark as done")
+        .accessibilityLabel(isDone ? "Done" : "Not done")
+        .accessibilityHint(isDone ? "Marks this as not done" : "Marks this as done")
+        .accessibilityAddTraits(isDone ? [.isButton, .isSelected] : .isButton)
     }
 }
 
