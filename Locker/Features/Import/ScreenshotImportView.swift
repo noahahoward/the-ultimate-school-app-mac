@@ -29,6 +29,7 @@ struct ScreenshotImportView: View {
     @State private var duplicateOverridden = false
     @State private var scheduleDuplicates: [UUID: DuplicateDetector.Match] = [:]
     @State private var hasClipboardImage = false
+    @State private var isChoosingWindow = false
     @State private var readingMessage = "Reading…"
 
     // Editable copies, so a misread can be corrected before saving.
@@ -59,6 +60,16 @@ struct ScreenshotImportView: View {
             footer
         }
         .frame(width: 520, height: 620)
+        .sheet(isPresented: $isChoosingWindow) {
+            WindowChooserView(
+                onCapture: { image in
+                    isChoosingWindow = false
+                    read(NSImage(cgImage: image, size: .zero))
+                },
+                onCancel: { isChoosingWindow = false }
+            )
+            .frame(width: 480, height: 460)
+        }
     }
 
     private var header: some View {
@@ -94,27 +105,38 @@ struct ScreenshotImportView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
 
-                HStack(spacing: 10) {
-                    Button(action: captureFromScreen) {
-                        Label("Take a screenshot", systemImage: "camera.viewfinder")
+                VStack(spacing: 8) {
+                    Button { isChoosingWindow = true } label: {
+                        Label("Pick a window", systemImage: "macwindow.on.rectangle")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
 
-                    Button(action: chooseFile) {
-                        Label("Choose a file", systemImage: "folder")
-                            .frame(maxWidth: .infinity)
+                    HStack(spacing: 8) {
+                        Button(action: captureFromScreen) {
+                            Label("Select an area", systemImage: "camera.viewfinder")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+
+                        Button(action: chooseFile) {
+                            Label("Choose a file", systemImage: "folder")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
                 }
                 .padding(.horizontal, 40)
                 .padding(.top, 4)
 
-                Text("Images, PDFs and text files. You can also drop one here.")
+                Text("Picking a window lets you set the page up first — the crosshair blocks clicking.")
                     .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 30)
 
                 if hasClipboardImage {
                     Button("Paste the image on your clipboard", action: pasteFromClipboard)
@@ -149,6 +171,10 @@ struct ScreenshotImportView: View {
         .onAppear {
             // Dev affordance, same shape as LOCKER_SEED: read a given file on
             // open so the review screens can be checked without clicking through.
+            if ProcessInfo.processInfo.environment["LOCKER_OPEN"] == "windows" {
+                isChoosingWindow = true
+                return
+            }
             if let path = ProcessInfo.processInfo.environment["LOCKER_IMPORT_FILE"] {
                 readFile(at: URL(fileURLWithPath: path))
                 return

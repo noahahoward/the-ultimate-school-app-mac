@@ -91,7 +91,8 @@ struct ContentView: View {
             registerHotkey()
             // Dev affordance, same shape as LOCKER_SEED: open a sheet on launch
             // so the import flow can be checked without clicking through.
-            if ProcessInfo.processInfo.environment["LOCKER_OPEN"] == "import" {
+            if let open = ProcessInfo.processInfo.environment["LOCKER_OPEN"],
+               open == "import" || open == "windows" {
                 app.activeSheet = .screenshotImport
             }
             if let tab = ProcessInfo.processInfo.environment["LOCKER_SETTINGS"],

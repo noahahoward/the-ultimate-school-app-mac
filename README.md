@@ -71,10 +71,20 @@ To poke around the interface without typing in a whole schedule, launch with
 
 ## Adding work from a screenshot
 
-Press **Add from a screenshot** (⇧⌘I) and choose **Take a screenshot** — Locker
-hides itself and hands you the usual crosshair — or **Choose a file**, which
-accepts images, PDFs, and text files. You can also drop any of those anywhere in
-the window. It reads the details and shows them for
+Press **Add from a screenshot** (⇧⌘I), then:
+
+- **Pick a window** — choose any open window by name and Locker captures it
+  directly. Nothing is captured until you pick, so you can get the page exactly
+  right first. For a browser it also lists the tabs, and switches to the one you
+  choose before capturing.
+- **Select an area** — the familiar crosshair, for part of a screen. Locker hides
+  itself first. Note the crosshair swallows clicks, so set the page up beforehand.
+- **Choose a file** — images, PDFs, and text files.
+
+You can also drop any of those anywhere in the window, or paste an image.
+
+Picking a window needs Screen Recording permission, and listing browser tabs asks
+to control the browser; if either is refused, the other ways still work. It reads the details and shows them for
 review before anything is saved. Which kind of screenshot it is, is worked out
 from the text: several classes pinned to periods is a schedule, anything else is
 an assignment.
