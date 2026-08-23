@@ -5,6 +5,8 @@ import SwiftData
 @Model
 final class AppSettings {
     var hasCompletedOnboarding: Bool = false
+    /// Class names read before term markers were dropped are tidied once.
+    var hasTidiedClassNames: Bool = false
     var studentName: String = ""
 
     // Schedule

@@ -218,4 +218,41 @@ final class ScreenshotRoutingTests: XCTestCase {
         ])
         XCTAssertLessThan(ScheduleParsing.rows(from: ocr).count, 2)
     }
+
+    // MARK: - Term markers on class names
+
+    func testTheRomanNumeralForTheSemesterIsDropped() {
+        XCTAssertEqual(ScheduleParsing.nameWithoutTermMarker("BIOLOGY I", semester: 1), "BIOLOGY")
+        XCTAssertEqual(ScheduleParsing.nameWithoutTermMarker("BIOLOGY II", semester: 2), "BIOLOGY")
+        XCTAssertEqual(ScheduleParsing.nameWithoutTermMarker("HONORS ENGLISH 9 I", semester: 1),
+                       "HONORS ENGLISH 9")
+        XCTAssertEqual(ScheduleParsing.nameWithoutTermMarker("ALG 2 FOR PRECALC II", semester: 2),
+                       "ALG 2 FOR PRECALC")
+    }
+
+    func testASpelledOutTermIsDropped() {
+        XCTAssertEqual(ScheduleParsing.nameWithoutTermMarker("OFF CAMPUS SEMINARY SEM 1", semester: 1),
+                       "OFF CAMPUS SEMINARY")
+        XCTAssertEqual(ScheduleParsing.nameWithoutTermMarker("STUDY HALL S2", semester: 2),
+                       "STUDY HALL")
+    }
+
+    func testANumeralNamingTheLevelIsKept() {
+        // Spanish II in the first half of the year is a level, not a term.
+        XCTAssertEqual(ScheduleParsing.nameWithoutTermMarker("SPANISH II", semester: 1), "SPANISH II")
+        XCTAssertEqual(ScheduleParsing.nameWithoutTermMarker("LATIN I", semester: 2), "LATIN I")
+    }
+
+    func testABareNumberIsNeverTakenForATerm() {
+        // Otherwise Spanish 2 in the second semester would become Spanish.
+        XCTAssertEqual(ScheduleParsing.nameWithoutTermMarker("SPANISH 2", semester: 2), "SPANISH 2")
+    }
+
+    func testAYearLongClassKeepsItsName() {
+        XCTAssertEqual(ScheduleParsing.nameWithoutTermMarker("BAND I", semester: 0), "BAND I")
+    }
+
+    func testANameThatIsOnlyAMarkerSurvives() {
+        XCTAssertEqual(ScheduleParsing.nameWithoutTermMarker("I", semester: 1), "I")
+    }
 }

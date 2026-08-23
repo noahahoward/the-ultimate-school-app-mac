@@ -1109,8 +1109,9 @@ struct ScreenshotImportView: View {
         var created = 0
 
         for row in schedule.rows where row.include {
-            let name = row.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !name.isEmpty else { continue }
+            let read = row.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !read.isEmpty else { continue }
+            let name = ScheduleParsing.nameWithoutTermMarker(read, semester: row.semester)
 
             // Ticked rows are added even when they look like duplicates: the
             // student saw the warning and chose to.

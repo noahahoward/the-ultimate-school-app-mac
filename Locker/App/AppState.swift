@@ -104,6 +104,21 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Tidies away term markers left on class names by earlier imports.
+    ///
+    /// Runs once. The semester it belongs to already says which half of the
+    /// year a class is, so the marker only made the two halves sort apart.
+    func tidyClassNamesIfNeeded() {
+        guard !settings.hasTidiedClassNames else { return }
+        for schoolClass in allClasses(includeArchived: true) {
+            schoolClass.name = ScheduleParsing.nameWithoutTermMarker(
+                schoolClass.name, semester: schoolClass.semester
+            )
+        }
+        settings.hasTidiedClassNames = true
+        save()
+    }
+
     func allClasses(includeArchived: Bool = false) -> [SchoolClass] {
         let all = (try? context.fetch(FetchDescriptor<SchoolClass>())) ?? []
         return all

@@ -256,4 +256,37 @@ enum ScheduleParsing {
         }
         return trimmed
     }
+
+    /// Drops the term marker a timetable puts on the end of a class name.
+    ///
+    /// Schools list a year-long course twice, "BIOLOGY I" and "BIOLOGY II",
+    /// where the numeral is the half of the year rather than the level. The
+    /// semester is already recorded, so the marker only splits one class into
+    /// two names that sort apart.
+    ///
+    /// It is dropped only when it agrees with the semester the class is in.
+    /// A "SPANISH II" sitting in the first semester is naming a level, not a
+    /// term, and is left alone.
+    static func nameWithoutTermMarker(_ name: String, semester: Int) -> String {
+        guard semester == 1 || semester == 2 else { return name }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        var words = trimmed.split(separator: " ").map(String.init)
+        guard words.count >= 2, let last = words.last else { return trimmed }
+
+        let marker = last.uppercased()
+        let roman = ["I": 1, "II": 2]
+        if roman[marker] == semester {
+            words.removeLast()
+        } else if marker == String(semester), words.count >= 3,
+                  ["SEM", "SEMESTER", "S", "TERM"].contains(words[words.count - 2].uppercased()) {
+            words.removeLast(2)
+        } else if marker == "S\(semester)" {
+            words.removeLast()
+        } else {
+            return trimmed
+        }
+        // Never reduce a name to nothing.
+        let shortened = words.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+        return shortened.isEmpty ? trimmed : shortened
+    }
 }

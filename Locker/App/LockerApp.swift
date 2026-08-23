@@ -27,6 +27,7 @@ struct LockerApp: App {
                 .environmentObject(focusTimer)
                 .modelContainer(container)
                 .onAppear(perform: configureFocusTimer)
+                .onAppear { app.tidyClassNamesIfNeeded() }
         }
         .defaultSize(width: 1100, height: 720)
         .commands {
