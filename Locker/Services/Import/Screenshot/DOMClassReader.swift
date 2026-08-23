@@ -8,66 +8,110 @@ import Foundation
 /// teacher, period — read with the same rules as a screenshot card.
 enum DOMClassReader {
 
-    /// Links that identify a course on the sites students actually use.
-    static func isCourseLink(_ href: String) -> Bool {
-        guard let url = URL(string: href) else { return false }
+    /// The course this link addresses, if it addresses one.
+    ///
+    /// Real links carry an account prefix — "/u/2/c/<id>" — and the same course
+    /// is linked several times over: the sidebar entry, the card, the tile's
+    /// "open your work". They all share the id, which is what ties them together.
+    static func courseID(in href: String) -> String? {
+        guard let url = URL(string: href) else { return nil }
         let host = url.host ?? ""
-        let path = url.path
+        let parts = url.path.split(separator: "/").map(String.init)
 
         if host.contains("classroom.google.com") {
-            // /c/<id> is a course; /c/<id>/a/<id>/details is one assignment.
-            let parts = path.split(separator: "/").map(String.init)
-            return parts.count == 2 && parts[0] == "c"
+            // ".../c/<id>" and nothing after it: deeper paths are assignments.
+            guard let index = parts.lastIndex(of: "c"), index == parts.count - 2 else { return nil }
+            return parts[index + 1]
         }
         if host.contains("instructure.com") {
-            let parts = path.split(separator: "/").map(String.init)
-            return parts.count == 2 && parts[0] == "courses"
+            guard let index = parts.lastIndex(of: "courses"), index == parts.count - 2 else { return nil }
+            return parts[index + 1]
         }
-        return false
+        return nil
     }
 
-    static func classes(from page: PageContent) -> [ClassDraft] {
-        var drafts: [ClassDraft] = []
-        var seen = Set<String>()
+    static func isCourseLink(_ href: String) -> Bool { courseID(in: href) != nil }
 
-        for link in page.links where isCourseLink(link.href) {
-            guard seen.insert(link.href).inserted else { continue }
-            guard let draft = draft(from: link) else { continue }
-            drafts.append(draft)
+    static func classes(from page: PageContent) -> [ClassDraft] {
+        var byCourse: [String: [PageContent.Link]] = [:]
+        for link in page.links {
+            guard let id = courseID(in: link.href) else { continue }
+            byCourse[id, default: []].append(link)
         }
+
+        let drafts = byCourse.compactMap { _, links -> ClassDraft? in draft(forCourse: links) }
         return drafts.sorted { ($0.period ?? 99) < ($1.period ?? 99) }
     }
 
-    static func draft(from link: PageContent.Link) -> ClassDraft? {
-        // The link's own text is the full name; the label is a fallback for
-        // sites that put the name in aria-label and an icon in the link.
-        let name = pick(link.text, link.label)
-        guard !name.isEmpty, name.count >= 3 else { return nil }
+    /// Builds one class from every link that points at it.
+    static func draft(forCourse links: [PageContent.Link]) -> ClassDraft? {
+        guard let name = name(from: links), name.count >= 3 else { return nil }
+        let cardLines = lines(of: card(for: name, among: links))
 
         var draft = ClassDraft()
         draft.name = name
-
-        let lines = link.card
-            .split(whereSeparator: \.isNewline)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-
-        draft.teacher = lines.first { $0 != name && CardReader.isTeacherName($0) } ?? ""
-        draft.period = ([name] + lines).compactMap { CardReader.periodIn($0) }.first
-        draft.semester = ([name] + lines).compactMap { CardReader.semesterInName($0) }.first ?? 0
-        draft.sourceLine = lines.isEmpty ? name : lines.joined(separator: " · ")
+        draft.teacher = cardLines.first { $0 != name && !isFurniture($0) && CardReader.isTeacherName($0) } ?? ""
+        draft.period = ([name] + cardLines).compactMap { CardReader.periodIn($0) }.first
+        draft.semester = ([name] + cardLines).compactMap { CardReader.semesterInName($0) }.first ?? 0
+        draft.sourceLine = cardLines.prefix(4).joined(separator: " · ")
         return draft
     }
 
-    /// Prefers whichever of the two says more, since sites differ over which
-    /// carries the full name.
-    private static func pick(_ text: String, _ label: String) -> String {
-        let a = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let b = label.trimmingCharacters(in: .whitespacesAndNewlines)
-        if a.isEmpty { return b }
-        if b.isEmpty { return a }
-        // A label that merely repeats the text with decoration is no better.
-        return b.count > a.count && b.contains(a) ? b : a
+    /// The class's own name, from a link whose text is laid out over lines.
+    ///
+    /// A tile leads with a one-letter avatar, so the name is the first line with
+    /// anything to it. The run-together variant of the same link — where every
+    /// line has been concatenated — is skipped, since its name would carry the
+    /// avatar letter and the section fused on.
+    static func name(from links: [PageContent.Link]) -> String? {
+        // Laid-out text first: it separates the avatar from the name.
+        for link in links where link.text.contains("\n") {
+            if let found = firstMeaningful(lines(of: link.text)) { return found }
+        }
+        // Then a label, which sites often set to the plain name.
+        if let label = links.lazy
+            .map({ $0.label.trimmingCharacters(in: .whitespaces) })
+            .first(where: { !$0.isEmpty }) {
+            return label
+        }
+        // Finally single-line text, for sites that put the name in the link and
+        // nothing else around it.
+        return links.lazy.compactMap { firstMeaningful(lines(of: $0.text)) }.first
+    }
+
+    /// The tile belonging to this class, rather than the list it sits in.
+    ///
+    /// A class's own tile begins with its name — but so does the sidebar for
+    /// whichever class comes first, and that blob holds every class at once. The
+    /// tightest block that begins with the name is the one that belongs to it.
+    static func card(for name: String, among links: [PageContent.Link]) -> String {
+        let owned = links.filter {
+            let cardLines = lines(of: $0.card)
+            return cardLines.count >= 2 && firstMeaningful(cardLines) == name
+        }
+        if let tightest = owned.min(by: { lines(of: $0.card).count < lines(of: $1.card).count }) {
+            return tightest.card
+        }
+        return links.max { lines(of: $0.card).count < lines(of: $1.card).count }?.card ?? ""
+    }
+
+    private static func firstMeaningful(_ lines: [String]) -> String? {
+        lines.first { $0.count >= 3 && !isFurniture($0) }
+    }
+
+    private static func lines(of text: String) -> [String] {
+        text.split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
+    /// Controls and helper links that sit inside a class tile.
+    static func isFurniture(_ line: String) -> Bool {
+        let lower = line.lowercased()
+        if lower.hasPrefix("open your work") || lower.hasPrefix("open folder") { return true }
+        if lower.hasPrefix("more options") || lower == "more_vert" { return true }
+        if ["to-do", "enrolled", "class", "assignment", "learn with gemini"].contains(lower) { return true }
+        return false
     }
 
     /// When no course links are found the page still has its text, which the
