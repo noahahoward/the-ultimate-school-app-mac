@@ -94,6 +94,11 @@ struct ContentView: View {
             if ProcessInfo.processInfo.environment["LOCKER_OPEN"] == "import" {
                 app.activeSheet = .screenshotImport
             }
+            if let tab = ProcessInfo.processInfo.environment["LOCKER_SETTINGS"],
+               let settingsTab = SettingsTab(rawValue: tab) {
+                app.settingsTab = settingsTab
+                openSettings()
+            }
             if let name = ProcessInfo.processInfo.environment["LOCKER_SECTION"],
                let section = AppSection(rawValue: name) {
                 app.section = section

@@ -103,10 +103,19 @@ private struct ScheduleSettings: View {
                     set: { app.settings.firstDayOfSchool = $0; app.save() }
                 ), displayedComponents: .date)
 
+                // An unset end date used to display as today, so nudging the
+                // picker would end the school year this morning and turn every
+                // day after it into a non-school day.
                 DatePicker("Last day", selection: Binding(
-                    get: { app.settings.lastDayOfSchool ?? Date() },
+                    get: { app.settings.lastDayOfSchool ?? ScheduleSettings.defaultLastDay() },
                     set: { app.settings.lastDayOfSchool = $0; app.save() }
                 ), displayedComponents: .date)
+
+                if app.settings.lastDayOfSchool == nil {
+                    Text("Not set yet — Locker treats every weekday as a school day.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section("Days off") {
@@ -137,6 +146,16 @@ private struct ScheduleSettings: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    /// The end of the current school year: the coming June, not today.
+    static func defaultLastDay(now: Date = Date(), calendar: Calendar = .current) -> Date {
+        var comps = calendar.dateComponents([.year], from: now)
+        // Before June the year ends this calendar year; after it, the next one.
+        if calendar.component(.month, from: now) >= 6 { comps.year = (comps.year ?? 2026) + 1 }
+        comps.month = 6
+        comps.day = 5
+        return calendar.date(from: comps) ?? now
     }
 
     /// Adds every school day in a range, skipping any already marked.
