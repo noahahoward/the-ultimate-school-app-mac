@@ -47,23 +47,32 @@ enum BrowserDOM {
     /// redesign of the site changes what is found rather than breaking it.
     static let script = """
         (function(){
+          function lines(el) {
+            if (!el) return '';
+            var out = [], walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null), node;
+            while ((node = walk.nextNode()) && out.length < 25) {
+              var t = (node.textContent || '').replace(/\\s+/g, ' ').trim();
+              if (t) out.push(t);
+            }
+            return out.join('\\n');
+          }
           var out = {url: location.href, title: document.title, links: [], text: ''};
           var seen = {};
           var anchors = document.querySelectorAll('a[href]');
           for (var i = 0; i < anchors.length && out.links.length < 200; i++) {
             var a = anchors[i];
-            var text = (a.innerText || '').trim();
+            var text = lines(a);
             var label = a.getAttribute('aria-label') || a.getAttribute('title') || '';
             if (!text && !label) continue;
-            var key = a.href + '|' + text;
+            var key = a.href + '|' + text.slice(0, 80);
             if (seen[key]) continue;
             seen[key] = 1;
             var box = a.closest('li') || a.closest('[role=listitem]') || a.parentElement;
             out.links.push({
               href: a.href,
-              text: text.slice(0, 200),
+              text: text.slice(0, 300),
               label: label.slice(0, 200),
-              card: box ? (box.innerText || '').slice(0, 400) : ''
+              card: box ? lines(box).slice(0, 600) : ''
             });
           }
           out.text = (document.body.innerText || '').slice(0, 20000);

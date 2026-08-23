@@ -393,7 +393,15 @@ struct ScreenshotImportView: View {
             }
             Spacer()
             Button("Cancel") { dismiss() }
-            if schedule != nil {
+            if !assignments.isEmpty {
+                Button(selectedAssignmentCount == 0
+                       ? "Nothing to add"
+                       : "Add \(selectedAssignmentCount) item\(selectedAssignmentCount == 1 ? "" : "s")",
+                       action: saveAssignments)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(selectedAssignmentCount == 0)
+                    .keyboardShortcut(.defaultAction)
+            } else if schedule != nil {
                 Button(selectedRowCount == 0
                        ? "Nothing to add"
                        : "Add \(selectedRowCount) class\(selectedRowCount == 1 ? "" : "es")",

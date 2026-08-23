@@ -92,7 +92,14 @@ enum DOMAssignmentReader {
             return lines[marker + 1]
         }
         let counts = Dictionary(grouping: lines, by: { $0 }).mapValues(\.count)
-        return counts.first { $0.value > 1 && $0.key != title && !isFurniture($0.key) }?.key ?? ""
+        if let repeated = counts.first(where: { $0.value > 1 && $0.key != title && !isFurniture($0.key) })?.key {
+            return repeated
+        }
+        // Otherwise the class is usually the last thing said about the item, once
+        // the date and the controls are discounted.
+        return lines.last {
+            $0 != title && !isFurniture($0) && FieldParsing.dateAndTime(from: $0) == nil
+        } ?? ""
     }
 
     /// Labels and controls that sit inside an item without describing it.
