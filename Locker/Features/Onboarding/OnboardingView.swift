@@ -9,6 +9,7 @@ struct OnboardingView: View {
 
     @State private var step = 0
     @State private var newClassName = ""
+    @State private var newClassSemester = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -56,35 +57,42 @@ struct OnboardingView: View {
             .pickerStyle(.radioGroup)
             .labelsHidden()
 
-            if app.settings.scheduleKind == .alternatingAB {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Which is today?")
-                        .font(.system(size: 12, weight: .medium))
-                    Picker("", selection: anchorBinding) {
-                        Text("Today is an A day").tag(true)
-                        Text("Today is a B day").tag(false)
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    Text("If the letters ever drift after a day off, you can reset this in Settings.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.top, 4)
-            }
-
             DatePicker(
                 "First day of school",
                 selection: Binding(
                     get: { app.settings.firstDayOfSchool ?? Date() },
-                    set: { app.settings.firstDayOfSchool = $0 }
+                    set: { app.settings.firstDayOfSchool = $0; syncAnchor() }
                 ),
                 displayedComponents: .date
             )
 
+            if app.settings.scheduleKind == .alternatingAB {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Is \(firstDayText) an A day or a B day?")
+                        .font(.system(size: 12, weight: .medium))
+                    Picker("", selection: anchorBinding) {
+                        Text("A day").tag(true)
+                        Text("B day").tag(false)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    Text("Everything after it alternates from there. If the letters ever drift after a day off, you can reset this in Settings.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.top, 4)
+            }
+
             Spacer()
         }
         .padding(30)
+        .onAppear {
+            if app.settings.firstDayOfSchool == nil {
+                app.settings.firstDayOfSchool = Calendar.current.startOfDay(for: Date())
+            }
+            syncAnchor()
+        }
     }
 
     private var classesStep: some View {
@@ -119,9 +127,15 @@ struct OnboardingView: View {
             Text("Or type them in")
                 .font(.system(size: 12, weight: .medium))
 
-            HStack(spacing: 8) {                TextField("Class name", text: $newClassName)
+            HStack(spacing: 8) {
+                TextField("Class name", text: $newClassName)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit(addClass)
+                Picker("", selection: $newClassSemester) {
+                    ForEach(SemesterChoice.all, id: \.value) { Text($0.label).tag($0.value) }
+                }
+                .labelsHidden()
+                .frame(width: 116)
                 Button("Add", action: addClass)
                     .disabled(newClassName.trimmingCharacters(in: .whitespaces).isEmpty)
             }
@@ -139,6 +153,14 @@ struct OnboardingView: View {
                                 Text(schoolClass.name)
                                     .font(.system(size: 12))
                                 Spacer()
+                                Picker("", selection: Binding(
+                                    get: { schoolClass.semester },
+                                    set: { schoolClass.semester = $0; app.save() }
+                                )) {
+                                    ForEach(SemesterChoice.all, id: \.value) { Text($0.label).tag($0.value) }
+                                }
+                                .labelsHidden()
+                                .frame(width: 108)
                                 Button {
                                     app.context.delete(schoolClass)
                                     app.save()
@@ -243,9 +265,21 @@ struct OnboardingView: View {
             get: { app.settings.abAnchorIsA },
             set: { isA in
                 app.settings.abAnchorIsA = isA
-                app.settings.abAnchorDate = Calendar.current.startOfDay(for: Date())
+                syncAnchor()
             }
         )
+    }
+
+    /// The letters are counted from the first day of school, not from today.
+    /// Today may be a weekend, a holiday, or the middle of August.
+    private func syncAnchor() {
+        let day = app.settings.firstDayOfSchool ?? Date()
+        app.settings.abAnchorDate = Calendar.current.startOfDay(for: day)
+    }
+
+    private var firstDayText: String {
+        guard let day = app.settings.firstDayOfSchool else { return "your first day" }
+        return day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
     }
 
     private func addClass() {
@@ -255,6 +289,7 @@ struct OnboardingView: View {
             name: name,
             colorHex: ClassPalette.hex(forIndex: classes.count),
             daysMask: Weekdays.mask(from: Weekdays.schoolWeek),
+            semester: newClassSemester,
             sortIndex: classes.count
         )
         app.context.insert(created)
@@ -267,4 +302,11 @@ struct OnboardingView: View {
         app.save()
         dismiss()
     }
+}
+
+/// How a class is offered: all year, or one half of it.
+enum SemesterChoice {
+    static let all: [(value: Int, label: String)] = [
+        (0, "All year"), (1, "Semester 1"), (2, "Semester 2"),
+    ]
 }
