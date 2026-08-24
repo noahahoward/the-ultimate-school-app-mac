@@ -6,6 +6,8 @@ public struct ScheduleConfig: Equatable, Sendable {
     public var schoolDays: Set<Int>
     public var abAnchorDate: Date?
     public var abAnchorIsA: Bool
+    /// Dates the rotation starts over on a named letter.
+    public var abResets: [ABReset]
     public var noSchoolDays: [Date]
     /// Dates when the timetable is set aside and every class meets — an
     /// introduction day, an assembly day, an exam review day.
@@ -22,6 +24,7 @@ public struct ScheduleConfig: Equatable, Sendable {
         schoolDays: Set<Int> = Weekdays.schoolWeek,
         abAnchorDate: Date? = nil,
         abAnchorIsA: Bool = true,
+        abResets: [ABReset] = [],
         noSchoolDays: [Date] = [],
         allClassDates: [Date] = [],
         allClassWeekdays: Set<Int> = [],
@@ -33,6 +36,7 @@ public struct ScheduleConfig: Equatable, Sendable {
         self.schoolDays = schoolDays
         self.abAnchorDate = abAnchorDate
         self.abAnchorIsA = abAnchorIsA
+        self.abResets = abResets
         self.noSchoolDays = noSchoolDays
         self.allClassDates = allClassDates
         self.allClassWeekdays = allClassWeekdays
@@ -53,6 +57,23 @@ public protocol ScheduleItem {
     var isArchived: Bool { get }
     /// 0 = all year, 1 = first semester, 2 = second semester.
     var semester: Int { get }
+}
+
+/// A day the rotation is set back to a known letter, whatever came before it.
+///
+/// Districts differ on what a break does. Most carry the rotation across it —
+/// the day off simply does not count. Others come back on a fixed letter every
+/// time, and without saying so the whole term after a break reads inverted.
+public struct ABReset: Equatable, Sendable, Codable, Identifiable {
+    public var date: Date
+    public var isA: Bool
+
+    public var id: Date { date }
+
+    public init(date: Date, isA: Bool) {
+        self.date = date
+        self.isA = isA
+    }
 }
 
 public enum DayLetter: String, Sendable {
@@ -117,7 +138,14 @@ public enum ScheduleEngine {
         config: ScheduleConfig, calendar: Calendar = .current
     ) -> Date? {
         guard let anchor = config.abAnchorDate else { return nil }
-        var cursor = calendar.startOfDay(for: anchor)
+        return nextLetteredDay(onOrAfter: anchor, config: config, calendar: calendar)
+    }
+
+    /// The first day from here forward that carries a letter.
+    static func nextLetteredDay(
+        onOrAfter date: Date, config: ScheduleConfig, calendar: Calendar = .current
+    ) -> Date? {
+        var cursor = calendar.startOfDay(for: date)
         var guardrail = 0
         while !isLetteredDay(cursor, config: config, calendar: calendar), guardrail < 400 {
             guardrail += 1
@@ -127,13 +155,40 @@ public enum ScheduleEngine {
         return isLetteredDay(cursor, config: config, calendar: calendar) ? cursor : nil
     }
 
+    /// Every point the rotation is known from, earliest first.
+    ///
+    /// The start of the year, plus each date it is set back to a named letter.
+    /// Each is moved forward to a day that actually carries a letter, since a
+    /// term often resumes on a day the school has set aside.
+    static func anchors(config: ScheduleConfig, calendar: Calendar = .current) -> [ABReset] {
+        var found: [ABReset] = []
+        if let start = letteredAnchor(config: config, calendar: calendar) {
+            found.append(ABReset(date: start, isA: config.abAnchorIsA))
+        }
+        for reset in config.abResets {
+            guard let day = nextLetteredDay(onOrAfter: reset.date, config: config, calendar: calendar)
+            else { continue }
+            found.append(ABReset(date: day, isA: reset.isA))
+        }
+        // A later reset on the same day wins, so the student can correct one.
+        var byDay: [Date: ABReset] = [:]
+        for entry in found { byDay[calendar.startOfDay(for: entry.date)] = entry }
+        return byDay.values.sorted { $0.date < $1.date }
+    }
+
     public static func letter(for date: Date, config: ScheduleConfig, calendar: Calendar = .current) -> DayLetter? {
         guard config.kind == .alternatingAB else { return nil }
-        guard let anchor = letteredAnchor(config: config, calendar: calendar) else { return nil }
         guard isLetteredDay(date, config: config, calendar: calendar) else { return nil }
 
-        let index = letteredDayOffset(from: anchor, to: date, config: config, calendar: calendar)
-        let anchorLetter: DayLetter = config.abAnchorIsA ? .a : .b
+        let all = anchors(config: config, calendar: calendar)
+        let day = calendar.startOfDay(for: date)
+        // The most recent restart on or before this day, or the first one when
+        // the date is earlier than any of them.
+        guard let anchor = all.last(where: { calendar.startOfDay(for: $0.date) <= day }) ?? all.first
+        else { return nil }
+
+        let index = letteredDayOffset(from: anchor.date, to: date, config: config, calendar: calendar)
+        let anchorLetter: DayLetter = anchor.isA ? .a : .b
         let isEven = ((index % 2) + 2) % 2 == 0
         return isEven ? anchorLetter : anchorLetter.other
     }

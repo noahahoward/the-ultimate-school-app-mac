@@ -188,6 +188,8 @@ private struct ScheduleSettings: View {
     @EnvironmentObject private var app: AppState
     @State private var breakStart = Date()
     @State private var setAsideDay = Date()
+    @State private var restartDay = Date()
+    @State private var restartIsA = true
     @State private var breakEnd = Date()
 
     var body: some View {
@@ -235,6 +237,57 @@ private struct ScheduleSettings: View {
                     Text("Not set yet — Locker treats every weekday as a school day.")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
+                }
+            }
+
+            if app.settings.scheduleKind == .alternatingAB {
+                Section("Rotation restarts") {
+                    Text("A day off does not advance the rotation: the day back takes the letter the missed day would have had. If your district instead comes back on a fixed letter, say so here.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    HStack {
+                        DatePicker("", selection: $restartDay, displayedComponents: .date)
+                            .labelsHidden()
+                        Picker("", selection: $restartIsA) {
+                            Text("starts on A").tag(true)
+                            Text("starts on B").tag(false)
+                        }
+                        .labelsHidden()
+                        .frame(width: 130)
+                        Button("Add") {
+                            let day = Calendar.current.startOfDay(for: restartDay)
+                            app.settings.abResets.removeAll {
+                                Calendar.current.isDate($0.date, inSameDayAs: day)
+                            }
+                            app.settings.abResets.append(ABReset(date: day, isA: restartIsA))
+                            app.settings.abResets.sort { $0.date < $1.date }
+                            app.save()
+                        }
+                        Spacer()
+                    }
+
+                    ForEach(app.settings.abResets) { reset in
+                        HStack {
+                            Text(reset.date.formatted(.dateTime.weekday(.abbreviated)
+                                                        .month(.abbreviated).day().year()))
+                                .font(.system(size: 12))
+                            Text(reset.isA ? "starts on A" : "starts on B")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button {
+                                app.settings.abResets.removeAll {
+                                    Calendar.current.isDate($0.date, inSameDayAs: reset.date)
+                                }
+                                app.save()
+                            } label: {
+                                Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
                 }
             }
 

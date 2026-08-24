@@ -33,6 +33,8 @@ final class AppSettings {
     var secondSemesterStart: Date?
     /// Dates when every class meets and no A/B letter is spent.
     var allClassDates: [Date] = []
+    /// Dates the A/B rotation starts over on a named letter.
+    var abResets: [ABReset] = []
     /// Weekdays that always work that way — a Friday run differently.
     var allClassWeekdays: [Int] = []
 
@@ -100,6 +102,7 @@ final class AppSettings {
             schoolDays: schoolDays,
             abAnchorDate: abAnchorDate,
             abAnchorIsA: abAnchorIsA,
+            abResets: abResets,
             noSchoolDays: noSchoolDays,
             allClassDates: allClassDates,
             allClassWeekdays: Set(allClassWeekdays),
