@@ -11,6 +11,7 @@ struct OnboardingView: View {
     @State private var newClassName = ""
     @State private var newClassSemester = 0
     @State private var shownMonth = Date()
+    @State private var markingExceptions = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -19,7 +20,7 @@ struct OnboardingView: View {
             Divider()
             footer
         }
-        .frame(width: 580, height: 580)
+        .frame(width: 580, height: 640)
     }
 
     @ViewBuilder
@@ -49,7 +50,7 @@ struct OnboardingView: View {
     }
 
     private var scheduleStep: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             stepHeader("How does your schedule work?",
                        "Pick the first day of school. Everything counts from there.")
 
@@ -66,18 +67,24 @@ struct OnboardingView: View {
                 showsLetters: app.settings.scheduleKind == .alternatingAB
                     && app.settings.firstDayOfSchool != nil
             ) { day in
-                app.settings.firstDayOfSchool = day
-                syncAnchor()
+                if markingExceptions { toggleException(day) } else { setFirstDay(day) }
             }
 
-            if app.settings.scheduleKind == .alternatingAB {
-                Toggle("The first day is an introduction day — every class meets",
-                       isOn: Binding(
-                        get: { firstDayIsIntroduction },
-                        set: { setFirstDayIsIntroduction($0) }
-                       ))
-                    .font(.system(size: 12))
+            Picker("", selection: $markingExceptions) {
+                Text("Set the first day").tag(false)
+                Text("Mark exception days").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
 
+            Text(markingExceptions
+                 ? "Press any day the timetable is set aside and every class meets — an introduction day, or a short day run differently. It takes no A or B, and the rotation carries on either side of it."
+                 : "Press the day school starts. Everything counts from there.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if app.settings.scheduleKind == .alternatingAB {
                 HStack(spacing: 10) {
                     Text("\(letteredStartText) is")
                         .font(.system(size: 12, weight: .medium))
@@ -296,16 +303,19 @@ struct OnboardingView: View {
         return day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
     }
 
-    private var firstDayIsIntroduction: Bool {
-        guard let first = app.settings.firstDayOfSchool else { return false }
-        return app.settings.allClassDates.contains { Calendar.current.isDate($0, inSameDayAs: first) }
+    private func setFirstDay(_ day: Date) {
+        app.settings.firstDayOfSchool = day
+        syncAnchor()
+        app.save()
     }
 
-    private func setFirstDayIsIntroduction(_ isIntroduction: Bool) {
-        guard let first = app.settings.firstDayOfSchool else { return }
-        let day = Calendar.current.startOfDay(for: first)
-        app.settings.allClassDates.removeAll { Calendar.current.isDate($0, inSameDayAs: day) }
-        if isIntroduction { app.settings.allClassDates.append(day) }
+    /// Marks a day the timetable is set aside for, or unmarks one already marked.
+    private func toggleException(_ day: Date) {
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: day)
+        let already = app.settings.allClassDates.contains { calendar.isDate($0, inSameDayAs: start) }
+        app.settings.allClassDates.removeAll { calendar.isDate($0, inSameDayAs: start) }
+        if !already { app.settings.allClassDates.append(start) }
         app.save()
     }
 
@@ -399,8 +409,7 @@ private struct MonthGrid: View {
         let letter = showsLetters
             ? ScheduleEngine.letter(for: day, config: config, calendar: calendar)
             : nil
-        let isSetAside = showsLetters
-            && ScheduleEngine.isAllClassDay(day, config: config, calendar: calendar)
+        let isSetAside = ScheduleEngine.isAllClassDay(day, config: config, calendar: calendar)
 
         return Button { onPick(day) } label: {
             VStack(spacing: 0) {
