@@ -10,6 +10,7 @@ struct OnboardingView: View {
     @State private var step = 0
     @State private var newClassName = ""
     @State private var newClassSemester = 0
+    @State private var shownMonth = Date()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -48,49 +49,50 @@ struct OnboardingView: View {
     }
 
     private var scheduleStep: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            stepHeader("How does your schedule work?", "This decides how the day view lays out.")
+        VStack(alignment: .leading, spacing: 12) {
+            stepHeader("How does your schedule work?",
+                       "Pick the first day of school. Everything counts from there.")
 
             Picker("", selection: scheduleBinding) {
                 ForEach(ScheduleKind.allCases, id: \.self) { Text($0.label).tag($0) }
             }
-            .pickerStyle(.radioGroup)
+            .pickerStyle(.segmented)
             .labelsHidden()
 
-            DatePicker(
-                "First day of school",
-                selection: Binding(
-                    get: { app.settings.firstDayOfSchool ?? Date() },
-                    set: { app.settings.firstDayOfSchool = $0; syncAnchor() }
-                ),
-                displayedComponents: .date
-            )
+            MonthGrid(
+                month: $shownMonth,
+                selected: app.settings.firstDayOfSchool,
+                config: app.settings.scheduleConfig,
+                showsLetters: app.settings.scheduleKind == .alternatingAB
+                    && app.settings.firstDayOfSchool != nil
+            ) { day in
+                app.settings.firstDayOfSchool = day
+                syncAnchor()
+            }
 
             if app.settings.scheduleKind == .alternatingAB {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Is \(firstDayText) an A day or a B day?")
+                HStack(spacing: 10) {
+                    Text("\(firstDayText) is")
                         .font(.system(size: 12, weight: .medium))
                     Picker("", selection: anchorBinding) {
-                        Text("A day").tag(true)
-                        Text("B day").tag(false)
+                        Text("an A day").tag(true)
+                        Text("a B day").tag(false)
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
-                    Text("Everything after it alternates from there. If the letters ever drift after a day off, you can reset this in Settings.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    .frame(width: 180)
+                    Spacer()
                 }
-                .padding(.top, 4)
             }
 
-            Spacer()
+            Spacer(minLength: 0)
         }
-        .padding(30)
+        .padding(24)
         .onAppear {
             if app.settings.firstDayOfSchool == nil {
                 app.settings.firstDayOfSchool = Calendar.current.startOfDay(for: Date())
             }
+            shownMonth = app.settings.firstDayOfSchool ?? Date()
             syncAnchor()
         }
     }
@@ -309,4 +311,92 @@ enum SemesterChoice {
     static let all: [(value: Int, label: String)] = [
         (0, "All year"), (1, "Semester 1"), (2, "Semester 2"),
     ]
+}
+
+/// A month at a glance, for picking the day the year starts on.
+///
+/// Once the first day and its letter are known every other day follows, so the
+/// month shows the letters too — which is the quickest way to see the answer
+/// was right.
+private struct MonthGrid: View {
+    @Binding var month: Date
+    var selected: Date?
+    var config: ScheduleConfig
+    var showsLetters: Bool
+    var onPick: (Date) -> Void
+
+    private let calendar = Calendar.current
+
+    var body: some View {
+        VStack(spacing: 6) {
+            HStack {
+                Button { step(-1) } label: { Image(systemName: "chevron.left") }
+                    .buttonStyle(.plain)
+                Spacer()
+                Text(month.formatted(.dateTime.month(.wide).year()))
+                    .font(Theme.display(15, weight: .semibold))
+                Spacer()
+                Button { step(1) } label: { Image(systemName: "chevron.right") }
+                    .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 4)
+
+            HStack(spacing: 2) {
+                ForEach(weekdayInitials, id: \.self) { initial in
+                    Text(initial)
+                        .font(Theme.data(10, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+
+            ForEach(weeks, id: \.first) { week in
+                HStack(spacing: 2) {
+                    ForEach(Array(week.enumerated()), id: \.offset) { _, day in
+                        if let day { cell(day) } else { Color.clear.frame(maxWidth: .infinity) }
+                    }
+                }
+            }
+        }
+    }
+
+    private func cell(_ day: Date) -> some View {
+        let isSelected = selected.map { calendar.isDate($0, inSameDayAs: day) } ?? false
+        let isSchoolDay = ScheduleEngine.isSchoolDay(day, config: config, calendar: calendar)
+        let letter = showsLetters
+            ? ScheduleEngine.letter(for: day, config: config, calendar: calendar)
+            : nil
+
+        return Button { onPick(day) } label: {
+            VStack(spacing: 0) {
+                Text("\(calendar.component(.day, from: day))")
+                    .font(Theme.data(12, weight: isSelected ? .bold : .regular))
+                    .foregroundStyle(isSelected ? AnyShapeStyle(.white)
+                                     : isSchoolDay ? AnyShapeStyle(.primary)
+                                     : AnyShapeStyle(.quaternary))
+                Text(letter?.rawValue ?? " ")
+                    .font(Theme.data(8, weight: .bold))
+                    .foregroundStyle(isSelected ? AnyShapeStyle(.white.opacity(0.8))
+                                     : AnyShapeStyle(Theme.accent))
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 34)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(isSelected ? Theme.accent : Color.clear)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var weekdayInitials: [String] { MonthLayout.weekdayInitials(calendar: calendar) }
+
+    private var weeks: [[Date?]] { MonthLayout.weeks(of: month, calendar: calendar) }
+
+    private func step(_ months: Int) {
+        if let moved = calendar.date(byAdding: .month, value: months, to: month) {
+            month = moved
+        }
+    }
 }
