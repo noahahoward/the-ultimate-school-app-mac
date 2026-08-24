@@ -327,6 +327,7 @@ private struct MonthGrid: View {
     var onPick: (Date) -> Void
 
     private let calendar = Calendar.current
+    private static let rowHeight: CGFloat = 34
 
     var body: some View {
         VStack(spacing: 6) {
@@ -351,10 +352,17 @@ private struct MonthGrid: View {
                 }
             }
 
-            ForEach(weeks, id: \.first) { week in
+            ForEach(Array(weeks.enumerated()), id: \.offset) { _, week in
                 HStack(spacing: 2) {
                     ForEach(Array(week.enumerated()), id: \.offset) { _, day in
-                        if let day { cell(day) } else { Color.clear.frame(maxWidth: .infinity) }
+                        if let day {
+                            cell(day)
+                        } else {
+                            // Held to the height of a day. A bare colour is
+                            // greedy in both directions and would swallow
+                            // whatever room the grid had left over.
+                            Color.clear.frame(maxWidth: .infinity).frame(height: Self.rowHeight)
+                        }
                     }
                 }
             }
@@ -381,7 +389,7 @@ private struct MonthGrid: View {
                                      : AnyShapeStyle(Theme.accent))
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 34)
+            .frame(height: Self.rowHeight)
             .background(
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                     .fill(isSelected ? Theme.accent : Color.clear)
