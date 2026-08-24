@@ -1,10 +1,17 @@
 import Foundation
+import SwiftUI
 import SwiftData
 
 /// Single-row settings record. Fetch with `AppSettings.current(in:)`.
 @Model
 final class AppSettings {
     var hasCompletedOnboarding: Bool = false
+
+    // Appearance
+    var accentHex: String = Theme.Accent.default.hex
+    var typeStyleRaw: String = Theme.TypeStyle.default.rawValue
+    /// "system", "light" or "dark".
+    var appearanceRaw: String = "system"
     /// Class names read before term markers were dropped are tidied once.
     var hasTidiedClassNames: Bool = false
     var studentName: String = ""
@@ -118,5 +125,23 @@ final class AppSettings {
         context.insert(created)
         try? context.save()
         return created
+    }
+
+    /// The named accent in use, or nil when the colour was picked by hand.
+    var namedAccent: Theme.Accent? {
+        Theme.Accent.allCases.first { $0.hex.caseInsensitiveCompare(accentHex) == .orderedSame }
+    }
+
+    var typeStyle: Theme.TypeStyle {
+        get { Theme.TypeStyle(rawValue: typeStyleRaw) ?? .default }
+        set { typeStyleRaw = newValue.rawValue }
+    }
+
+    var colorScheme: ColorScheme? {
+        switch appearanceRaw {
+        case "light": .light
+        case "dark": .dark
+        default: nil
+        }
     }
 }

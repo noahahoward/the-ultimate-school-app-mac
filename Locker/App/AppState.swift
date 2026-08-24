@@ -32,7 +32,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
 }
 
 enum SettingsTab: String, CaseIterable, Identifiable, Hashable {
-    case general, schedule, reminders, sync, updates
+    case general, look, schedule, reminders, sync, updates
     var id: String { rawValue }
 }
 
@@ -102,6 +102,13 @@ final class AppState: ObservableObject {
         } catch {
             lastError = "Couldn't save: \(error.localizedDescription)"
         }
+    }
+
+    /// Pushes the chosen look into Theme, which the whole app reads from.
+    func applyAppearance() {
+        Theme.accentHex = settings.accentHex
+        Theme.typeStyle = settings.typeStyle
+        objectWillChange.send()
     }
 
     /// Tidies away term markers left on class names by earlier imports.

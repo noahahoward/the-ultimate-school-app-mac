@@ -244,7 +244,7 @@ struct TodayView: View {
                 EmptyState(
                     symbol: "tray",
                     title: "Nothing on the list",
-                    message: "Add work with the box above, or connect Google Classroom in Settings to pull it in automatically."
+                    message: "Add work with the box above, or read it straight off the page it is posted on."
                 )
             }
         } else {

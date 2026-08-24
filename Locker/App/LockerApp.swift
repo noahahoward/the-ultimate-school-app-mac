@@ -28,6 +28,8 @@ struct LockerApp: App {
                 .modelContainer(container)
                 .onAppear(perform: configureFocusTimer)
                 .onAppear { app.tidyClassNamesIfNeeded() }
+                .onAppear { app.applyAppearance() }
+                .preferredColorScheme(app.settings.colorScheme)
         }
         .defaultSize(width: 1100, height: 720)
         .commands {

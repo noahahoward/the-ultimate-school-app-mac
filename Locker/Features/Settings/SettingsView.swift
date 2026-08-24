@@ -8,6 +8,8 @@ struct SettingsView: View {
         TabView(selection: $app.settingsTab) {
             GeneralSettings()
                 .tabItem { Label("General", systemImage: "gearshape") }.tag(SettingsTab.general)
+            LookSettings()
+                .tabItem { Label("Look", systemImage: "paintpalette") }.tag(SettingsTab.look)
             ScheduleSettings()
                 .tabItem { Label("Schedule", systemImage: "calendar") }.tag(SettingsTab.schedule)
             ReminderSettings()
@@ -17,7 +19,124 @@ struct SettingsView: View {
             UpdateSettings()
                 .tabItem { Label("Updates", systemImage: "arrow.down.circle") }.tag(SettingsTab.updates)
         }
-        .frame(width: 520, height: 470)
+        .frame(width: 560, height: 470)
+    }
+}
+
+// MARK: - Look
+
+/// Colour and type are the first things anyone changes, and the reason an app
+/// feels like theirs rather than issued to them.
+private struct LookSettings: View {
+    @EnvironmentObject private var app: AppState
+
+    /// Eight across, so fifteen colours and the custom well fill two rows
+    /// exactly with no stray one sitting on its own.
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 8)
+
+    var body: some View {
+        Form {
+            Section("Accent") {
+                LazyVGrid(columns: columns, spacing: 10) {
+                    ForEach(Theme.Accent.allCases) { accent in
+                        Button {
+                            choose(accent.hex)
+                        } label: {
+                            swatch(Color(hex: accent.hex),
+                                   label: accent.label,
+                                   isChosen: app.settings.accentHex.caseInsensitiveCompare(accent.hex) == .orderedSame)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    VStack(spacing: 4) {
+                        ColorPicker("", selection: Binding(
+                            get: { Color(hex: app.settings.accentHex) },
+                            set: { choose($0.hexString) }
+                        ), supportsOpacity: false)
+                        .labelsHidden()
+                        .frame(height: 34)
+                        Text("Custom")
+                            .font(.system(size: 10))
+                            .foregroundStyle(app.settings.namedAccent == nil ? .primary : .secondary)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
+            Section("Headings") {
+                Picker("Type", selection: Binding(
+                    get: { app.settings.typeStyle },
+                    set: {
+                        app.settings.typeStyle = $0
+                        app.applyAppearance()
+                        app.save()
+                    }
+                )) {
+                    ForEach(Theme.TypeStyle.allCases) { style in
+                        Text(style.label).tag(style)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                HStack(spacing: 14) {
+                    Text("Tuesday").font(Theme.display(19, weight: .bold))
+                    Text("3").font(Theme.display(19, weight: .bold))
+                        .foregroundStyle(Theme.accent)
+                    Text("due").font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            Section("Appearance") {
+                Picker("Mode", selection: Binding(
+                    get: { app.settings.appearanceRaw },
+                    set: { app.settings.appearanceRaw = $0; app.save() }
+                )) {
+                    Text("System").tag("system")
+                    Text("Light").tag("light")
+                    Text("Dark").tag("dark")
+                }
+                .pickerStyle(.segmented)
+            }
+
+            Section("Class colours") {
+                Text("Each class carries its own colour, set when you open it.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func swatch(_ color: Color, label: String, isChosen: Bool) -> some View {
+        VStack(spacing: 4) {
+            ZStack {
+                Circle().fill(color).frame(width: 26, height: 26)
+                if isChosen {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+            }
+            .overlay(
+                Circle()
+                    .strokeBorder(Color.primary.opacity(isChosen ? 0.5 : 0), lineWidth: 2)
+                    .frame(width: 32, height: 32)
+            )
+            .frame(height: 34)
+            Text(label)
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .contentShape(Rectangle())
+    }
+
+    private func choose(_ hex: String) {
+        app.settings.accentHex = hex
+        app.applyAppearance()
+        app.save()
     }
 }
 

@@ -12,7 +12,89 @@ enum Theme {
     /// from the highlighter every student already owns.
     static let highlighter = Color(hex: "FFD84D")
     static let highlighterDeep = Color(hex: "E8B923")
-    static let accent = Color(hex: "2F6FED")
+    /// Set from settings at launch and whenever it is changed. A stored
+    /// property rather than an environment value because the theme is read from
+    /// plain functions all over the app, not only from inside a view body.
+    static var accentHex = Accent.default.hex
+    static var accent: Color { Color(hex: accentHex) }
+
+    /// The accents on offer. Named, because "Grape" is easier to pick than a
+    /// hex code and this is the part people change first. Fifteen of them, so
+    /// they and the custom well fill their rows exactly.
+    enum Accent: String, CaseIterable, Identifiable, Sendable {
+        case blue, indigo, grape, plum, rose
+        case red, sunset, amber, gold, lime
+        case forest, teal, cyan, slate, ink
+
+        static let `default` = Accent.blue
+        var id: String { rawValue }
+
+        var hex: String {
+            switch self {
+            case .blue: "2F6FED"
+            case .indigo: "4F46E5"
+            case .grape: "8B5CF6"
+            case .plum: "A21CAF"
+            case .rose: "E8437E"
+            case .red: "E5484D"
+            case .sunset: "F2751A"
+            case .amber: "F59E0B"
+            case .gold: "D9A215"
+            case .lime: "65A30D"
+            case .forest: "2E9E5B"
+            case .teal: "17A2B8"
+            case .cyan: "0EA5E9"
+            case .slate: "64748B"
+            case .ink: "3F4A5A"
+            }
+        }
+
+        var label: String {
+            switch self {
+            case .blue: "Blue"
+            case .indigo: "Indigo"
+            case .grape: "Grape"
+            case .plum: "Plum"
+            case .rose: "Rose"
+            case .red: "Red"
+            case .sunset: "Sunset"
+            case .amber: "Amber"
+            case .gold: "Gold"
+            case .lime: "Lime"
+            case .forest: "Forest"
+            case .teal: "Teal"
+            case .cyan: "Cyan"
+            case .slate: "Slate"
+            case .ink: "Ink"
+            }
+        }
+    }
+
+    /// How the headings and the big numbers are cut.
+    enum TypeStyle: String, CaseIterable, Identifiable, Sendable {
+        case rounded, plain, serif
+
+        static let `default` = TypeStyle.rounded
+        var id: String { rawValue }
+
+        var design: Font.Design {
+            switch self {
+            case .rounded: .rounded
+            case .plain: .default
+            case .serif: .serif
+            }
+        }
+
+        var label: String {
+            switch self {
+            case .rounded: "Rounded"
+            case .plain: "Plain"
+            case .serif: "Serif"
+            }
+        }
+    }
+
+    static var typeStyle = TypeStyle.default
     static let overdue = Color(hex: "E5484D")
     static let done = Color(hex: "3BA55D")
 
@@ -22,7 +104,7 @@ enum Theme {
 
     /// Rounded numerals for the human-scale numbers: counts, streaks, timers.
     static func display(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
-        .system(size: size, weight: weight, design: .rounded)
+        .system(size: size, weight: weight, design: typeStyle.design)
     }
 
     /// Monospaced, tabular figures for anything that should line up in a column:

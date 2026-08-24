@@ -128,7 +128,7 @@ struct AssignmentsView: View {
                             symbol: "checklist",
                             title: search.isEmpty ? "Nothing here yet" : "No matches",
                             message: search.isEmpty
-                                ? "Add work from Today, or connect Google Classroom in Settings."
+                                ? "Add work from Today, or read it off the page it is posted on."
                                 : "Try a different search.",
                             actionTitle: search.isEmpty ? "Add work" : nil,
                             action: search.isEmpty ? { app.presentQuickAdd() } : nil
