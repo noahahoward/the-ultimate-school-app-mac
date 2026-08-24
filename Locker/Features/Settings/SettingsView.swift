@@ -187,6 +187,7 @@ private struct GeneralSettings: View {
 private struct ScheduleSettings: View {
     @EnvironmentObject private var app: AppState
     @State private var breakStart = Date()
+    @State private var setAsideDay = Date()
     @State private var breakEnd = Date()
 
     var body: some View {
@@ -234,6 +235,56 @@ private struct ScheduleSettings: View {
                     Text("Not set yet — Locker treats every weekday as a school day.")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
+                }
+            }
+
+            Section("Days every class meets") {
+                Text("Some schools set a day aside — an introduction day, or a Friday run differently — when the timetable does not apply and every class meets. These carry no A or B, and the rotation picks up where it left off.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 4) {
+                    ForEach(Array(Weekdays.schoolWeek).sorted(), id: \.self) { weekday in
+                        let isOn = app.settings.allClassWeekdays.contains(weekday)
+                        Button {
+                            if isOn { app.settings.allClassWeekdays.removeAll { $0 == weekday } }
+                            else { app.settings.allClassWeekdays.append(weekday) }
+                            app.save()
+                        } label: {
+                            Text(Weekdays.letter(weekday))
+                                .font(Theme.data(11, weight: isOn ? .bold : .regular))
+                                .frame(width: 30, height: 24)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        .fill(isOn ? Theme.accent.opacity(0.9) : Color.secondary.opacity(0.12))
+                                )
+                                .foregroundStyle(isOn ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    Spacer()
+                }
+
+                HStack {
+                    Text("\(app.settings.allClassDates.count) other day\(app.settings.allClassDates.count == 1 ? "" : "s") marked")
+                    Spacer()
+                    DatePicker("", selection: $setAsideDay, displayedComponents: .date)
+                        .labelsHidden()
+                    Button("Mark") {
+                        let day = Calendar.current.startOfDay(for: setAsideDay)
+                        if !app.settings.allClassDates.contains(where: {
+                            Calendar.current.isDate($0, inSameDayAs: day)
+                        }) {
+                            app.settings.allClassDates.append(day)
+                            app.save()
+                        }
+                    }
+                    Button("Clear") {
+                        app.settings.allClassDates = []
+                        app.save()
+                    }
+                    .disabled(app.settings.allClassDates.isEmpty)
                 }
             }
 

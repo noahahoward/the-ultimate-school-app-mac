@@ -7,6 +7,12 @@ public struct ScheduleConfig: Equatable, Sendable {
     public var abAnchorDate: Date?
     public var abAnchorIsA: Bool
     public var noSchoolDays: [Date]
+    /// Dates when the timetable is set aside and every class meets — an
+    /// introduction day, an assembly day, an exam review day.
+    public var allClassDates: [Date]
+    /// Weekdays that always work that way, for a school whose Friday is run
+    /// differently from the rest of the week.
+    public var allClassWeekdays: Set<Int>
     public var firstDayOfSchool: Date?
     public var lastDayOfSchool: Date?
     public var secondSemesterStart: Date?
@@ -17,6 +23,8 @@ public struct ScheduleConfig: Equatable, Sendable {
         abAnchorDate: Date? = nil,
         abAnchorIsA: Bool = true,
         noSchoolDays: [Date] = [],
+        allClassDates: [Date] = [],
+        allClassWeekdays: Set<Int> = [],
         firstDayOfSchool: Date? = nil,
         lastDayOfSchool: Date? = nil,
         secondSemesterStart: Date? = nil
@@ -26,6 +34,8 @@ public struct ScheduleConfig: Equatable, Sendable {
         self.abAnchorDate = abAnchorDate
         self.abAnchorIsA = abAnchorIsA
         self.noSchoolDays = noSchoolDays
+        self.allClassDates = allClassDates
+        self.allClassWeekdays = allClassWeekdays
         self.firstDayOfSchool = firstDayOfSchool
         self.lastDayOfSchool = lastDayOfSchool
         self.secondSemesterStart = secondSemesterStart
@@ -74,20 +84,66 @@ public enum ScheduleEngine {
         return calendar.startOfDay(for: date) < calendar.startOfDay(for: start) ? 1 : 2
     }
 
+    /// A day the timetable is set aside for, when every class meets.
+    ///
+    /// It spends no letter: the alternation picks up on the far side exactly
+    /// where it left off, which is what a school means by an introduction day
+    /// or a Friday run differently.
+    public static func isAllClassDay(
+        _ date: Date, config: ScheduleConfig, calendar: Calendar = .current
+    ) -> Bool {
+        guard isSchoolDay(date, config: config, calendar: calendar) else { return false }
+        let day = calendar.startOfDay(for: date)
+        if config.allClassDates.contains(where: { calendar.isDate($0, inSameDayAs: day) }) {
+            return true
+        }
+        return config.allClassWeekdays.contains(calendar.component(.weekday, from: day))
+    }
+
+    /// A school day that carries a letter — everything except the days set aside.
+    static func isLetteredDay(
+        _ date: Date, config: ScheduleConfig, calendar: Calendar = .current
+    ) -> Bool {
+        isSchoolDay(date, config: config, calendar: calendar)
+            && !isAllClassDay(date, config: config, calendar: calendar)
+    }
+
+    /// Where the letters actually start.
+    ///
+    /// The anchor is normally the first day of school, but that day may be an
+    /// introduction day belonging to neither letter. The count then starts from
+    /// the first day that does carry one.
+    public static func letteredAnchor(
+        config: ScheduleConfig, calendar: Calendar = .current
+    ) -> Date? {
+        guard let anchor = config.abAnchorDate else { return nil }
+        var cursor = calendar.startOfDay(for: anchor)
+        var guardrail = 0
+        while !isLetteredDay(cursor, config: config, calendar: calendar), guardrail < 400 {
+            guardrail += 1
+            guard let next = calendar.date(byAdding: .day, value: 1, to: cursor) else { return nil }
+            cursor = next
+        }
+        return isLetteredDay(cursor, config: config, calendar: calendar) ? cursor : nil
+    }
+
     public static func letter(for date: Date, config: ScheduleConfig, calendar: Calendar = .current) -> DayLetter? {
         guard config.kind == .alternatingAB else { return nil }
-        guard let anchor = config.abAnchorDate else { return nil }
-        guard isSchoolDay(date, config: config, calendar: calendar) else { return nil }
+        guard let anchor = letteredAnchor(config: config, calendar: calendar) else { return nil }
+        guard isLetteredDay(date, config: config, calendar: calendar) else { return nil }
 
-        let index = schoolDayOffset(from: anchor, to: date, config: config, calendar: calendar)
+        let index = letteredDayOffset(from: anchor, to: date, config: config, calendar: calendar)
         let anchorLetter: DayLetter = config.abAnchorIsA ? .a : .b
         let isEven = ((index % 2) + 2) % 2 == 0
         return isEven ? anchorLetter : anchorLetter.other
     }
 
-    /// Signed count of school days between two dates. The anchor day itself is 0.
-    /// Walks day by day, which keeps holidays and custom school-day sets exact.
-    static func schoolDayOffset(
+    /// Signed count of lettered days between two dates. The anchor itself is 0.
+    ///
+    /// Days set aside for every class are passed over rather than counted, so
+    /// an introduction day in the middle of a week does not swap every letter
+    /// after it.
+    static func letteredDayOffset(
         from anchor: Date,
         to date: Date,
         config: ScheduleConfig,
@@ -108,7 +164,7 @@ public enum ScheduleEngine {
             guardrail += 1
             guard let next = calendar.date(byAdding: .day, value: 1, to: cursor) else { break }
             cursor = next
-            if isSchoolDay(cursor, config: config, calendar: calendar) { count += 1 }
+            if isLetteredDay(cursor, config: config, calendar: calendar) { count += 1 }
         }
         return forward ? count : -count
     }
@@ -125,14 +181,18 @@ public enum ScheduleEngine {
         guard isSchoolDay(date, config: config, calendar: calendar) else { return [] }
         let weekday = calendar.component(.weekday, from: date)
         let dayLetter = letter(for: date, config: config, calendar: calendar)
+        let everyClass = isAllClassDay(date, config: config, calendar: calendar)
 
         return classes
             .filter { item in
                 guard !item.isArchived else { return false }
-                guard item.daysMask & (1 << weekday) != 0 else { return false }
+                // On a day set aside, the timetable does not apply: every class
+                // this semester meets, whichever days it usually falls on.
+                if !everyClass, item.daysMask & (1 << weekday) == 0 { return false }
                 // A class tied to one semester disappears when the other is running.
                 if let activeSemester = semester(on: date, config: config, calendar: calendar),
                    item.semester != 0, item.semester != activeSemester { return false }
+                if everyClass { return true }
                 guard config.kind == .alternatingAB, let dayLetter else { return true }
                 switch item.abDesignation {
                 case .both: return true

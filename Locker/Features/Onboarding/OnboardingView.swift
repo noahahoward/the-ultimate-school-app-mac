@@ -71,8 +71,15 @@ struct OnboardingView: View {
             }
 
             if app.settings.scheduleKind == .alternatingAB {
+                Toggle("The first day is an introduction day — every class meets",
+                       isOn: Binding(
+                        get: { firstDayIsIntroduction },
+                        set: { setFirstDayIsIntroduction($0) }
+                       ))
+                    .font(.system(size: 12))
+
                 HStack(spacing: 10) {
-                    Text("\(firstDayText) is")
+                    Text("\(letteredStartText) is")
                         .font(.system(size: 12, weight: .medium))
                     Picker("", selection: anchorBinding) {
                         Text("an A day").tag(true)
@@ -280,9 +287,26 @@ struct OnboardingView: View {
         app.settings.abAnchorDate = Calendar.current.startOfDay(for: day)
     }
 
-    private var firstDayText: String {
-        guard let day = app.settings.firstDayOfSchool else { return "your first day" }
+    /// The day the letters actually begin, which is not the first day of school
+    /// when that day belongs to neither letter.
+    private var letteredStartText: String {
+        let day = ScheduleEngine.letteredAnchor(config: app.settings.scheduleConfig)
+            ?? app.settings.firstDayOfSchool
+        guard let day else { return "your first day" }
         return day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+    }
+
+    private var firstDayIsIntroduction: Bool {
+        guard let first = app.settings.firstDayOfSchool else { return false }
+        return app.settings.allClassDates.contains { Calendar.current.isDate($0, inSameDayAs: first) }
+    }
+
+    private func setFirstDayIsIntroduction(_ isIntroduction: Bool) {
+        guard let first = app.settings.firstDayOfSchool else { return }
+        let day = Calendar.current.startOfDay(for: first)
+        app.settings.allClassDates.removeAll { Calendar.current.isDate($0, inSameDayAs: day) }
+        if isIntroduction { app.settings.allClassDates.append(day) }
+        app.save()
     }
 
     private func addClass() {
@@ -375,6 +399,8 @@ private struct MonthGrid: View {
         let letter = showsLetters
             ? ScheduleEngine.letter(for: day, config: config, calendar: calendar)
             : nil
+        let isSetAside = showsLetters
+            && ScheduleEngine.isAllClassDay(day, config: config, calendar: calendar)
 
         return Button { onPick(day) } label: {
             VStack(spacing: 0) {
@@ -383,7 +409,7 @@ private struct MonthGrid: View {
                     .foregroundStyle(isSelected ? AnyShapeStyle(.white)
                                      : isSchoolDay ? AnyShapeStyle(.primary)
                                      : AnyShapeStyle(.quaternary))
-                Text(letter?.rawValue ?? " ")
+                Text(letter?.rawValue ?? (isSetAside ? "ALL" : " "))
                     .font(Theme.data(8, weight: .bold))
                     .foregroundStyle(isSelected ? AnyShapeStyle(.white.opacity(0.8))
                                      : AnyShapeStyle(Theme.accent))

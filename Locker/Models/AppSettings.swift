@@ -31,6 +31,10 @@ final class AppSettings {
     /// When the second-semester timetable takes over. Nil means the schedule
     /// never changes, and every class is treated as running all year.
     var secondSemesterStart: Date?
+    /// Dates when every class meets and no A/B letter is spent.
+    var allClassDates: [Date] = []
+    /// Weekdays that always work that way — a Friday run differently.
+    var allClassWeekdays: [Int] = []
 
     // Reminders
     var remindersEnabled: Bool = true
@@ -97,6 +101,8 @@ final class AppSettings {
             abAnchorDate: abAnchorDate,
             abAnchorIsA: abAnchorIsA,
             noSchoolDays: noSchoolDays,
+            allClassDates: allClassDates,
+            allClassWeekdays: Set(allClassWeekdays),
             firstDayOfSchool: firstDayOfSchool,
             lastDayOfSchool: lastDayOfSchool,
             secondSemesterStart: secondSemesterStart
