@@ -14,6 +14,15 @@ final class MonthLayoutTests: XCTestCase {
         try XCTUnwrap(calendar.date(from: DateComponents(year: year, month: month, day: day)))
     }
 
+    func testEveryMonthIsSixRowsSoTheGridNeverChangesHeight() throws {
+        for month in 1...12 {
+            let weeks = MonthLayout.weeks(of: try date(2026, month, 15), calendar: calendar)
+            XCTAssertEqual(weeks.count, 6, "month \(month) is \(weeks.count) rows")
+        }
+        // February 2027 opens on a Monday and needs only five.
+        XCTAssertEqual(MonthLayout.weeks(of: try date(2027, 2, 10), calendar: calendar).count, 6)
+    }
+
     func testEveryRowIsSevenLong() throws {
         for month in 1...12 {
             let weeks = MonthLayout.weeks(of: try date(2026, month, 15), calendar: calendar)

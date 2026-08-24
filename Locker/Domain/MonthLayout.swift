@@ -6,8 +6,11 @@ import Foundation
 /// exactly the kind of arithmetic that looks right and is off by a day.
 public enum MonthLayout {
 
-    /// The weeks of the month containing `date`, each seven long, padded with
-    /// nil where the month has not begun or has already ended.
+    /// The weeks of the month containing `date`: always six rows of seven,
+    /// padded with nil outside the month.
+    ///
+    /// Six because a month needs four to six of them, and a grid that changes
+    /// height as you page through the year moves everything below it.
     public static func weeks(of date: Date, calendar: Calendar = .current) -> [[Date?]] {
         guard let range = calendar.range(of: .day, in: .month, for: date),
               let first = calendar.date(from: calendar.dateComponents([.year, .month], from: date))
@@ -18,7 +21,7 @@ public enum MonthLayout {
         for offset in range {
             days.append(calendar.date(byAdding: .day, value: offset - 1, to: first))
         }
-        while days.count % 7 != 0 { days.append(nil) }
+        while days.count < 42 { days.append(nil) }
         return stride(from: 0, to: days.count, by: 7).map { Array(days[$0 ..< $0 + 7]) }
     }
 

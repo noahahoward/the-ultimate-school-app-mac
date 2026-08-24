@@ -19,7 +19,7 @@ struct OnboardingView: View {
             Divider()
             footer
         }
-        .frame(width: 560, height: 480)
+        .frame(width: 580, height: 580)
     }
 
     @ViewBuilder
