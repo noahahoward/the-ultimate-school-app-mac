@@ -232,20 +232,21 @@ struct OnboardingView: View {
     }
 
     private var footer: some View {
-        HStack {
-            if step > 0 {
-                Button("Back") { step -= 1 }
-            }
-            Spacer()
-            Text("\(step + 1) of 3")
-                .font(Theme.data(11))
-                .foregroundStyle(.tertiary)
-            Spacer()
+        // Laid over one another rather than in a row: spacers would centre the
+        // button between Back and the edge, which moves it when Back is absent.
+        ZStack {
             Button(step == 2 ? "Start using Locker" : "Continue") {
                 if step == 2 { finish() } else { step += 1 }
             }
             .buttonStyle(.borderedProminent)
             .keyboardShortcut(.defaultAction)
+
+            HStack {
+                if step > 0 {
+                    Button("Back") { step -= 1 }
+                }
+                Spacer()
+            }
         }
         .padding(12)
     }
